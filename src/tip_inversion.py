@@ -184,16 +184,16 @@ def TipAsym_variable_Toughness_Res(dist, *args):
 
 #-----------------------------------------------------------------------------------------------------------------------
 
-def FindBracket_dist(w, Kprime, Eprime, muPrime, Cprime, DistLstTS, dt, mesh, ResFunc):
-    """ 
+def FindBracket_dist(w, Kprime, Eprime, muPrime, Cprime, DistLstTS, dt, mesh, ResFunc): #todo: clean up tip inversion (robust bracketing and then brent method)
+    """
     Find the valid bracket for the root evaluation function.
     """
 
-    a = -DistLstTS * (1 + 5e3 * np.finfo(float).eps)
+    a = -DistLstTS * (1 + 5e3 * np.finfo(float).eps)#todo: what we do here?
     a[np.where(a <= np.finfo(float).eps * np.finfo(float).eps)[0]] = np.finfo(float).eps
     b = np.full((len(w),), 4 * (mesh.hx**2 + mesh.hy**2)**0.5, dtype=np.float64)
 
-    for i in range(0, len(w)):
+    for i in range(0, len(w)): #todo: do it with regula falsi
 
         TipAsmptargs = (w[i], Kprime[i], Eprime[i], muPrime[i], Cprime[i], -DistLstTS[i], dt)
         Res_a = ResFunc(a[i], *TipAsmptargs)
