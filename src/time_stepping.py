@@ -44,7 +44,7 @@ def attempt_time_step(Frac, C, mat_properties, fluid_properties, sim_properties,
 
     Qin = inj_properties.get_injection_rate(Frac.time, Frac.mesh)
 
-    if sim_properties.frontAdvancing == 'explicit':
+    if sim_properties.frontAdvancing == 'explicit':#todo: could have it seperately (another routine)
 
         perfNode_explFront = instrument_start('extended front', perfNode)
         exitstatus, Fr_k = time_step_explicit_front(Frac,
@@ -1312,15 +1312,15 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
 
     """
 
-    sgndDist_k = 1e50 * np.ones((Fr_lstTmStp.mesh.NumberOfElts,), float)  # Initializing the cells with maximum
-    # float value. (algorithm requires inf)
+    sgndDist_k = 1e50 * np.ones((Fr_lstTmStp.mesh.NumberOfElts,), float)  # Initializing the cells with maximum #todo: start independent fct
+    # float value. (algorithm requires inf) #todo:maximum machine value(or inf)
     sgndDist_k[Fr_lstTmStp.EltChannel] = 0  # for cells inside the fracture
 
     sgndDist_k[Fr_lstTmStp.EltTip] = Fr_lstTmStp.sgndDist[Fr_lstTmStp.EltTip] - (timeStep *
                                                                                  Fr_lstTmStp.v)
     current_prefactor = sim_properties.get_time_step_prefactor(Fr_lstTmStp.time + timeStep)
     front_region = np.where(abs(Fr_lstTmStp.sgndDist) < current_prefactor * 6.66 *(
-                Fr_lstTmStp.mesh.hx ** 2 + Fr_lstTmStp.mesh.hy ** 2) ** 0.5)[0]
+                Fr_lstTmStp.mesh.hx ** 2 + Fr_lstTmStp.mesh.hy ** 2) ** 0.5)[0] #todo: what is 6.66? What is this line doing?
     # the search region outwards from the front position at last time step
     pstv_region = np.where(Fr_lstTmStp.sgndDist[front_region] >= -(Fr_lstTmStp.mesh.hx ** 2 +
                                                                    Fr_lstTmStp.mesh.hy ** 2) ** 0.5)[0]
@@ -1400,7 +1400,7 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
 
     # EletsTipNew may contain fully filled elements also. Identifying only the partially filled elements
     partlyFilledTip = np.arange(EltsTipNew.shape[0])[np.in1d(EltsTipNew, EltTip_k)]
-
+    # todo: end independent fct
     if sim_properties.verbosity > 1:
         print('Solving the EHL system with the new trial footprint')
 
@@ -1410,7 +1410,7 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
     corr_ribbon = find_corresponding_ribbon_cell(EltsTipNew,
                                                  alpha_k,
                                                  zrVrtx_newTip,
-                                                 Fr_lstTmStp.mesh)
+                                                 Fr_lstTmStp.mesh) #todo: put it inside the front reconstruction?
     Cprime_tip = mat_properties.Cprime[corr_ribbon]
 
     if sim_properties.paramFromTip or mat_properties.anisotropic_K1c:
@@ -1438,7 +1438,7 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
         #todo close tip width instrumentation
 
     # stagnant tip cells i.e. the tip cells whose distance from front has not changed.
-    stagnant = Vel_k < 1e-14
+    stagnant = Vel_k < 1e-14 #todo: set to machine precision
     if stagnant.any() and not sim_properties.get_tipAsymptote() is 'U':
         if sim_properties.verbosity > 1:
             print("Stagnant front is only supported with universal tip asymptote. Continuing...")
@@ -1494,7 +1494,7 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
                                   stagnant=stagnant) / Fr_lstTmStp.mesh.EltArea
 
     # check if the tip volume has gone into negative
-    smallNgtvWTip = np.where(np.logical_and(wTip < 0, wTip > -1e-4 * np.mean(wTip)))
+    smallNgtvWTip = np.where(np.logical_and(wTip < 0, wTip > -1e-4 * np.mean(wTip)))#todo: change to machine precision? (why 1e-4?)
     if np.asarray(smallNgtvWTip).size > 0:
         wTip[smallNgtvWTip] = abs(wTip[smallNgtvWTip])
 
@@ -1568,7 +1568,7 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
         exitstatus = 5
         return exitstatus, None
 
-    fluidVel = data[0]
+    fluidVel = data[0]#todo: start independent fct.
     # setting arrival time for fully traversed tip elements (new channel elements)
     Tarrival_k = np.copy(Fr_lstTmStp.Tarrival)
     max_Tarrival = np.nanmax(Tarrival_k)
@@ -1581,7 +1581,7 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
     t_leave = Fr_lstTmStp.time + timeStep - (l_k[new_channel] - max_l) / Vel_k[new_channel]
     Tarrival_k[EltsTipNew[new_channel]] = (t_enter + t_leave) / 2
     to_correct = np.where(Tarrival_k[EltsTipNew[new_channel]] < max_Tarrival)[0]
-    Tarrival_k[EltsTipNew[new_channel[to_correct]]] = max_Tarrival
+    Tarrival_k[EltsTipNew[new_channel[to_correct]]] = max_Tarrival#todo: end independent fct.
 
     # the fracture to be returned for k plus 1 iteration
     Fr_kplus1 = copy.deepcopy(Fr_lstTmStp)
@@ -1625,7 +1625,7 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
                                                         Fr_lstTmStp.mesh,
                                                         sgndDist_k)
                 alpha_ribbon_km1 = np.zeros(Fr_lstTmStp.EltRibbon.size, )
-            else:
+            else:# todo: it is an underrelaxation (we should have a beta to set it)
                 alpha_ribbon_k = 0.3 * alpha_ribbon_k + 0.7 * projection_method(Fr_lstTmStp.EltRibbon,
                                                                              Fr_lstTmStp.EltChannel,
                                                                              Fr_lstTmStp.mesh,
@@ -1659,7 +1659,7 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
 
         # Initialization of the signed distance in the ribbon element - by inverting the tip asymptotics
         sgndDist_k = 1e50 * np.ones((Fr_lstTmStp.mesh.NumberOfElts,), float)  # Initializing the cells with extremely
-        # large float value. (algorithm requires inf)
+        # large float value. (algorithm requires inf) #todo: implement it with inf
 
         perfNode_tipInv = instrument_start('tip inversion', perfNode)
 
@@ -1751,7 +1751,7 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
     Fr_kplus1.injectedVol += sum(Qin) * timeStep
     Fr_kplus1.efficiency = (Fr_kplus1.injectedVol - Fr_kplus1.LkOffTotal) / Fr_kplus1.injectedVol
 
-    if sim_properties.saveRegime:
+    if sim_properties.saveRegime: #todo: returning when inverting the tip and ALWAYS save it. Get also all parameters like chi,v,lmk....
         regime = np.full((Fr_lstTmStp.mesh.NumberOfElts, ), np.nan, dtype=np.float32)
         regime[Fr_lstTmStp.EltRibbon] = find_regime(Fr_kplus1.w,
                                                     Fr_lstTmStp,
@@ -1762,7 +1762,7 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
                                                     -sgndDist_k[Fr_lstTmStp.EltRibbon])
         Fr_kplus1.regime = regime
 
-    if fluid_properties.turbulence:
+    if fluid_properties.turbulence: # todo: should be handled with different tip asymptotics etc.
         if sim_properties.saveReynNumb or sim_properties.saveFluidFlux:
             ReNumb, check = turbulence_check_tip(fluidVel, Fr_kplus1, fluid_properties, return_ReyNumb=True)
             if sim_properties.saveReynNumb:

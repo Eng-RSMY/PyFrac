@@ -71,7 +71,7 @@ class Controller:
         self.lstTmStp = None
         self.solveDetlaP_cp = self.sim_prop.solveDeltaP
         self.PstvInjJmp = None
-        self.fullyClosed = False
+        self.fullyClosed = False # todo: should be in fracture
         self.setFigPos = True
         self.lastSuccessfulTS = Fracture.time
         self.maxTmStp = 0
@@ -106,6 +106,7 @@ class Controller:
 
         if self.sim_prop.finalTime is None:
            if self.sim_prop.get_solTimeSeries() is None:
+               # todo: not necessarily an error
                 raise ValueError("The final time to stop the simulation is not provided!")
            else:
                self.sim_prop.finalTime = np.max(self.sim_prop.get_solTimeSeries())
@@ -116,6 +117,7 @@ class Controller:
 
         # Setting to volume control solver if viscosity is zero
         if self.fluid_prop.viscosity < 1e-15:
+            # todo: define machine epsilon somewhere
            print("Fluid viscosity is zero. Setting solver to volume control...")
            self.sim_prop.set_volumeControl(True)
 
@@ -156,7 +158,7 @@ class Controller:
             # save properties
             if not os.path.exists(self.sim_prop.get_outputFolder()):
                 os.makedirs(self.sim_prop.get_outputFolder())
-
+            # todo: why we miss the loading properties
             prop = (self.solid_prop, self.fluid_prop, self.injection_prop, self.sim_prop)
             with open(self.sim_prop.get_outputFolder() + "properties", 'wb') as output:
                 dill.dump(prop, output, -1)
@@ -180,7 +182,7 @@ class Controller:
                     raise ValueError("Symmetric fracture is only supported for inviscid fluid yet!")
 
             if not self.solid_prop.TI_elasticity:
-                if self.sim_prop.symmetric:
+                if self.sim_prop.symmetric: # todo: call it quarter matrix not symetric (because its not the matrix that is symmetric). Changes as well symetry file!
                     self.C = load_isotropic_elasticity_matrix_symmetric(self.fracture.mesh,
                                                                         self.solid_prop.Eprime)
                 else:
@@ -205,7 +207,7 @@ class Controller:
 
         print("Starting time = " + repr(self.fracture.time))
         # starting time stepping loop
-        while self.fracture.time < 0.999 * self.sim_prop.finalTime and self.TmStpCount < self.sim_prop.maxTimeSteps:
+        while self.fracture.time < 0.999 * self.sim_prop.finalTime and self.TmStpCount < self.sim_prop.maxTimeSteps:# todo: why this 0.999?
 
             timeStep = self.get_time_step()
 
@@ -214,7 +216,7 @@ class Controller:
             else:
                 tmStp_perf = None
 
-            # advancing time step
+            # advancing time step # todo: change the name to "solve time step"?
             status, Fr_n_pls1 = self.advance_time_step(self.fracture,
                                                          self.C,
                                                          timeStep,
@@ -253,7 +255,7 @@ class Controller:
                     self.sim_prop.tmStpPrefactor = self.tmStpPrefactor_copy
                 self.successfulTimeSteps += 1
 
-                # resetting the parameters for closure
+                # resetting the parameters for closure # todo: improve the closure algorithm
                 if self.fullyClosed:
                     # set to solve for pressure if the fracture was fully closed in last time step and is open now
                     self.sim_prop.solveDeltaP = False
@@ -352,7 +354,7 @@ class Controller:
                     self.write_to_log("\n\n---Simulation failed---")
 
                     raise SystemExit("Simulation failed.")
-                else:
+                else: #todo: this should be in the advance_time_step function (here only accepted or definitive failure of simulation)
                     # decrease time step pre-factor before taking the next fracture in the queue having last
                     # five time steps
                     if isinstance(self.sim_prop.tmStpPrefactor, np.ndarray):
@@ -395,7 +397,7 @@ class Controller:
 
 #-----------------------------------------------------------------------------------------------------------------------
 
-    def advance_time_step(self, Frac, C, timeStep, perfNode=None):
+    def advance_time_step(self, Frac, C, timeStep, perfNode=None):#todo: rename to "solve_time_step"?
         """
         This function advances the fracture by the given time step. In case of failure, reattempts are made with smaller
         time steps.
@@ -411,7 +413,7 @@ class Controller:
             - Fr (Fracture)           -- fracture after advancing time step.
         """
 
-        # loop for reattempting time stepping in case of failure.
+        # loop for reattempting time stepping in case of failure. #todo: should be out of this loop (around)
         for i in range(0, self.sim_prop.maxReattempts):
             # smaller time step to reattempt time stepping; equal to the given time step on first iteration
             tmStp_to_attempt = timeStep * self.sim_prop.reAttemptFactor ** i
@@ -629,7 +631,7 @@ class Controller:
 
     #-------------------------------------------------------------------------------------------------------------------
 
-    def get_time_step(self):
+    def get_time_step(self):# todo:call it maybe "adapt_time_step" or "calculate_new_time_step"
         """
         This function calculates the appropriate time step. It takes minimum of the time steps evaluated according to
         the following:
