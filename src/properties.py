@@ -238,7 +238,8 @@ class FluidProperties:
 
     """
 
-    def __init__(self, viscosity=None, density=1000., rheology="Newtonian", turbulence=False, compressibility=0):
+    def __init__(self, viscosity=None, density=1000., rheology="Newtonian", turbulence=False, compressibility=0,
+                 n=None, k=None, T0=None):
         """
         Constructor function.
 
@@ -254,10 +255,13 @@ class FluidProperties:
             self.viscosity = viscosity
             self.muPrime = 12. * self.viscosity  # the geometric viscosity in the parallel plate solution
 
-        rheologyOptions = ("Newtonian", "non-Newtonian")
+        rheologyOptions = ["Newtonian", "Herschel-Bulkley", "HB", "non-Newtonian"]
         if rheology in rheologyOptions:  # check if rheology match to any rheology option
-            if rheology is "Newtonian":
-                self.rheology = rheology
+            self.rheology = rheology
+            if rheology in ["Herschel-Bulkley", "HB"]:
+                self.n = n
+                self.k = k
+                self.T0 = T0
             elif rheology is "non-Newtonian":
                 raise ValueError("Non-Newtonian rheology not yet supported")
         else:# error
@@ -686,7 +690,7 @@ class SimulationProperties:
                                                  and leak off (see Donstov and Pierce, 2017))
                                             - MK (viscosity to toughness transition regime)
         """
-        tipAssymptOptions = ("K", "M", "Mt", "U", "MK", "MDR", "M_MDR")
+        tipAssymptOptions = ("K", "M", "Mt", "U", "MK", "MDR", "M_MDR", "HBF")
         if tip_asymptote in tipAssymptOptions:  # check if tip asymptote matches any option
             self.__tipAsymptote = tip_asymptote
         else: # error

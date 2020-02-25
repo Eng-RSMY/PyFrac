@@ -20,7 +20,6 @@ cnst_mc = 3 * beta_mtld**4 / (4 * beta_m**3)
 cnst_m = beta_m**3 / 3
 Ki_c = 3000
 
-#-----------------------------------------------------------------------------------------------------------------------
 
 def TipAsym_viscStor_Res(dist, *args):
     """Residual function for viscosity dominate regime, without leak off"""
@@ -147,6 +146,38 @@ def TipAsym_Universal_zrthOrder_Res(dist, *args):
 
     return sh - g0
 
+# ----------------------------------------------------------------------------------------------------------------------
+
+def TipAsym_Hershcel_Burkley_Res(dist, *args):
+    """Function to be minimized to find root for Herschel Bulkley (see Bessmertnykh and Donstov 2019)"""
+
+    (wEltRibbon, Kprime, Eprime, muPrime, Cbar, Dist_LstTS, dt, n, k, T0) = args
+
+    Vel = (dist - Dist_LstTS) / dt
+    alpha = -0.3107 * n + 1.9924
+    X = 2 * Cbar * Eprime / np.sqrt(Vel) / Kprime
+    Mprime = 2**(n + 1) * (2 * n + 1)**n / n**n * k
+    ell = (Kprime**(n + 2) / Mprime / Vel**n / Eprime**(n + 1))**(2 / (2 - n))
+    xt = np.sqrt(dist / ell)
+    T0t = T0 * 2 * Eprime * ell / Kprime / Kprime
+    wt = ((wEltRibbon * Eprime / Kprime / np.sqrt(dist))**alpha - (np.sqrt(4 * np.pi * T0t) * xt)**alpha)**(1 / alpha)
+
+    theta = 0.0452 * n**2 - 0.178 * n + 0.1753
+    Vm = 1 - wt ** -((2 + n) / (1 + theta))
+    Vmt = 1 - wt ** -((2 + 2 * n) / (1 + theta))
+    dm = (2 - n) / (2 + n)
+    dmt = (2 - n) / (2 + 2 * n)
+    Bm = (2 * (2 + n)**2 / n * np.tan(np.pi * n / (2 + n)))**(1 / (2 + n))
+    Bmt = (64 * (1 + n) ** 2 / (3 * n *(4 + n)) * np.tan(3 * np.pi * n / (4 * (1 + n))))**(1 / (2 + 2 * n))
+
+    dt1 = dmt * dm * Vmt * Vm * \
+          (Bm**((2 + n) / n) * Vm**((1 + theta) / n) + X / wt * Bmt**(2 * (1 + n) / n) * Vm**((1 + theta) / n)) / \
+          (dmt * Vmt * Bm**((2 + n) / n) * Vmt**((1 + theta) / n) +
+           dm * Vm * X / wt * Bmt**(2 * (1 + n) / n) * Vm**((1 + theta) / n))
+
+    return xt**((2 - n) / (1 + theta)) - dt1 * wt**((2 + n) / (1 + theta)) * (dm**(1 + theta) * Bm**(2 + n) +
+                            dmt**(1 + theta) * Bmt**(2 * (1 + n)) * ((1 + X / wt)**n - 1))**(-1 / (1 + theta))
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -184,7 +215,7 @@ def TipAsym_variable_Toughness_Res(dist, *args):
 
 #-----------------------------------------------------------------------------------------------------------------------
 
-def FindBracket_dist(w, Kprime, Eprime, muPrime, Cprime, DistLstTS, dt, mesh, ResFunc):
+def FindBracket_dist(w, Kprime, Eprime, muPrime, Cprime, DistLstTS, dt, mesh, ResFunc, fluidProp):
     """ 
     Find the valid bracket for the root evaluation function.
     """
@@ -194,8 +225,8 @@ def FindBracket_dist(w, Kprime, Eprime, muPrime, Cprime, DistLstTS, dt, mesh, Re
     b = np.full((len(w),), 4 * (mesh.hx**2 + mesh.hy**2)**0.5, dtype=np.float64)
 
     for i in range(0, len(w)):
-
-        TipAsmptargs = (w[i], Kprime[i], Eprime[i], muPrime[i], Cprime[i], -DistLstTS[i], dt)
+        TipAsmptargs = (w[i], Kprime[i], Eprime[i], muPrime[i], Cprime[i], -DistLstTS[i], dt, fluidProp.n, fluidProp.k, fluidProp.T0)
+        # TipAsmptargs = (w[i], Kprime[i], Eprime[i], muPrime[i], Cprime[i], -DistLstTS[i], dt)
         Res_a = ResFunc(a[i], *TipAsmptargs)
         Res_b = ResFunc(b[i], *TipAsmptargs)
 
@@ -216,7 +247,7 @@ def FindBracket_dist(w, Kprime, Eprime, muPrime, Cprime, DistLstTS, dt, mesh, Re
 
 # ----------------------------------------------------------------------------------------------------------------------
 
-def TipAsymInversion(w, frac, matProp, simParmtrs, dt=None, Kprime_k=None, Eprime_k=None, perfNode=None):
+def TipAsymInversion(w, frac, matProp, simParmtrs, fluidProp=None, dt=None, Kprime_k=None, Eprime_k=None, perfNode=None):
     """ 
     Evaluate distance from the front using tip assymptotics according to the given regime, given the fracture width in
     the ribbon cells.
@@ -260,6 +291,10 @@ def TipAsymInversion(w, frac, matProp, simParmtrs, dt=None, Kprime_k=None, Eprim
         ResFunc = TipAsym_MDR_Res
     elif simParmtrs.get_tipAsymptote() == 'M_MDR':
         ResFunc = TipAsym_M_MDR_Res
+    elif simParmtrs.get_tipAsymptote() == 'HBF':
+        ResFunc = TipAsym_Hershcel_Burkley_Res
+    else:
+        raise SystemExit("Tip asymptote type not supported!")
 
     # checking propagation condition
     stagnant = np.where(Kprime * (-frac.sgndDist[frac.EltRibbon])**0.5 / (
@@ -274,17 +309,30 @@ def TipAsymInversion(w, frac, matProp, simParmtrs, dt=None, Kprime_k=None, Eprim
                             frac.sgndDist[frac.EltRibbon[moving]],
                             dt,
                             frac.mesh,
-                            ResFunc)
+                            ResFunc,
+                            fluidProp)
 
     dist = -frac.sgndDist[frac.EltRibbon]
     for i in range(0, len(moving)):
-        TipAsmptargs = (w[frac.EltRibbon[moving[i]]],
+        if simParmtrs.get_tipAsymptote() == 'HBF':
+            TipAsmptargs = (w[frac.EltRibbon[moving[i]]],
                         Kprime[moving[i]],
                         Eprime[moving[i]],
                         frac.muPrime[frac.EltRibbon[moving[i]]],
                         matProp.Cprime[frac.EltRibbon[moving[i]]],
                         -frac.sgndDist[frac.EltRibbon[moving[i]]],
-                        dt)
+                        dt,
+                        fluidProp.n,
+                        fluidProp.k,
+                        fluidProp.T0)
+        else:
+            TipAsmptargs = (w[frac.EltRibbon[moving[i]]],
+                            Kprime[moving[i]],
+                            Eprime[moving[i]],
+                            frac.muPrime[frac.EltRibbon[moving[i]]],
+                            matProp.Cprime[frac.EltRibbon[moving[i]]],
+                            -frac.sgndDist[frac.EltRibbon[moving[i]]],
+                            dt)
         try:
             if perfNode is None:
                 dist[moving[i]] = brentq(ResFunc, a[i], b[i], TipAsmptargs)

@@ -424,7 +424,8 @@ def injection_extended_footprint(w_k, Fr_lstTmStp, C, timeStep, Qin, mat_propert
                                                                Fr_lstTmStp,
                                                                mat_properties,
                                                                sim_properties,
-                                                               timeStep,
+                                                               fluidProp=fluid_properties,
+                                                               dt=timeStep,
                                                                Kprime_k=Kprime_k,
                                                                Eprime_k=Eprime_k,
                                                                perfNode=perfNode_tipInv)
@@ -531,7 +532,8 @@ def injection_extended_footprint(w_k, Fr_lstTmStp, C, timeStep, Qin, mat_propert
 
     # the velocity of the front for the current front position
     # todo: not accurate on the first iteration. needed to be checked
-    Vel_k = -(sgndDist_k[EltsTipNew] - Fr_lstTmStp.sgndDist[EltsTipNew]) / timeStep
+    # Vel_k = -(sgndDist_k[EltsTipNew] - Fr_lstTmStp.sgndDist[EltsTipNew]) / timeStep
+    Vel_k = (Fr_lstTmStp.sgndDist[EltsTipNew] - sgndDist_k[EltsTipNew]) / timeStep
 
     # Calculate filling fraction of the tip cells for the current fracture position
     FillFrac_k = Integral_over_cell(EltsTipNew,
@@ -563,8 +565,6 @@ def injection_extended_footprint(w_k, Fr_lstTmStp, C, timeStep, Qin, mat_propert
 
     # EletsTipNew may contain fully filled elements also. Identifying only the partially filled elements
     partlyFilledTip = np.arange(EltsTipNew.shape[0])[np.in1d(EltsTipNew, EltTip_k)]
-    if sim_properties.verbosity > 1:
-        print('Solving the EHL system with the new trial footprint')
 
     # Calculating Carter's coefficient at tip to be used to calculate the volume integral in the tip cells
     zrVrtx_newTip = find_zero_vertex(EltsTipNew, sgndDist_k, Fr_lstTmStp.mesh)
@@ -599,10 +599,10 @@ def injection_extended_footprint(w_k, Fr_lstTmStp, C, timeStep, Qin, mat_propert
 
     # stagnant tip cells i.e. the tip cells whose distance from front has not changed.
     stagnant = abs(1 - sgndDist_k[EltsTipNew] / Fr_lstTmStp.sgndDist[EltsTipNew]) < 1e-5
-    if stagnant.any() and not sim_properties.get_tipAsymptote() is 'U':
-        if sim_properties.verbosity > 1:
-            print("Stagnant front is only supported with universal tip asymptote. continuing...")
-        stagnant = np.full((EltsTipNew.size, ), False, dtype=bool)
+    # if stagnant.any() and not sim_properties.get_tipAsymptote() is 'U':
+    #     if sim_properties.verbosity > 1:
+    #         print("Stagnant front is only supported with universal tip asymptote. continuing...")
+    #     stagnant = np.full((EltsTipNew.size, ), False, dtype=bool)
 
     if perfNode is not None:
         perfNode_tipWidth = instrument_start('tip width', perfNode)
@@ -707,6 +707,9 @@ def injection_extended_footprint(w_k, Fr_lstTmStp, C, timeStep, Qin, mat_propert
     if np.isnan(LkOff[EltsTipNew]).any():
         exitstatus = 13
         return exitstatus, None
+
+    if sim_properties.verbosity > 1:
+        print('Solving the EHL system with the new trial footprint')
 
     w_n_plus1, pf_n_plus1, data = solve_width_pressure(Fr_lstTmStp,
                                                         sim_properties,
@@ -1087,7 +1090,8 @@ def solve_width_pressure(Fr_lstTmStp, sim_properties, fluid_properties, mat_prop
                 wc_to_impose,
                 mat_properties.wc,
                 fluid_properties.compressibility,
-                corr_nei)
+                corr_nei,
+                fluid_properties)
 
             if sim_properties.substitutePressure:
                 if sim_properties.solveDeltaP:
@@ -1100,7 +1104,7 @@ def solve_width_pressure(Fr_lstTmStp, sim_properties, fluid_properties, mat_prop
                         sys_fun = MakeEquationSystem_ViscousFluid_pressure_substituted_sparse
                     else:
                         sys_fun = MakeEquationSystem_ViscousFluid_pressure_substituted
-                guess = np.zeros((len(EltCrack), ), float)
+                guess = np.ones((len(EltCrack), ), float)
                 guess[np.arange(len(to_solve_k))] = timeStep * sum(Qin) / Fr_lstTmStp.EltCrack.size \
                                                     * np.ones((len(to_solve_k),), float)
             else:
@@ -1109,17 +1113,25 @@ def solve_width_pressure(Fr_lstTmStp, sim_properties, fluid_properties, mat_prop
                 guess[np.arange(len(to_solve_k))] = timeStep * sum(Qin) / len(to_solve_k) *\
                                                     np.ones((len(to_solve_k),), float)
 
-            typValue = np.copy(guess)
             inter_itr_init = (vk, np.array([], dtype=int))
+            if sim_properties.elastohydrSolver == 'implicit_Picard':
+                typValue = np.copy(guess)
 
-            sol, data_Pic = Picard_Newton(None,
-                                   sys_fun,
-                                   guess,
-                                   typValue,
-                                   inter_itr_init,
-                                   sim_properties,
-                                   *arg,
-                                   perf_node=perfNode_widthConstrItr)
+                sol, data_Pic = Picard_Newton(None,
+                                       sys_fun,
+                                       guess,
+                                       typValue,
+                                       inter_itr_init,
+                                       sim_properties,
+                                       *arg,
+                                       perf_node=perfNode_widthConstrItr)
+            else:
+                sol, data_Pic = Anderson(sys_fun,
+                                         guess,
+                                         inter_itr_init,
+                                         sim_properties,
+                                         *arg,
+                                         perf_node=perfNode_widthConstrItr)
 
             failed_sol = np.isnan(sol).any()
 
@@ -1403,9 +1415,6 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
     # EletsTipNew may contain fully filled elements also. Identifying only the partially filled elements
     partlyFilledTip = np.arange(EltsTipNew.shape[0])[np.in1d(EltsTipNew, EltTip_k)]
 
-    if sim_properties.verbosity > 1:
-        print('Solving the EHL system with the new trial footprint')
-
     # Calculating Carter's coefficient at tip to be used to calculate the volume integral in the tip cells
     zrVrtx_newTip = find_zero_vertex(EltsTipNew, sgndDist_k, Fr_lstTmStp.mesh)
     # finding ribbon cells corresponding to tip cells
@@ -1433,7 +1442,9 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
 
     # the velocity of the front for the current front position
     # todo: not accurate on the first iteration. needed to be checked
-    Vel_k = -(sgndDist_k[EltsTipNew] - Fr_lstTmStp.sgndDist[EltsTipNew]) / timeStep
+    # Vel_k = -(sgndDist_k[EltsTipNew] - Fr_lstTmStp.sgndDist[EltsTipNew]) / timeStep
+    Vel_k = (Fr_lstTmStp.sgndDist[EltsTipNew] - sgndDist_k[EltsTipNew]) / timeStep
+
 
     if perfNode is not None:
         perfNode_tipWidth = instrument_start('tip width', perfNode)
@@ -1441,10 +1452,10 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
 
     # stagnant tip cells i.e. the tip cells whose distance from front has not changed.
     stagnant = Vel_k < 1e-14
-    if stagnant.any() and not sim_properties.get_tipAsymptote() is 'U':
-        if sim_properties.verbosity > 1:
-            print("Stagnant front is only supported with universal tip asymptote. Continuing...")
-        stagnant = np.full((EltsTipNew.size,), False, dtype=bool)
+    # if stagnant.any() and not sim_properties.get_tipAsymptote() is 'U':
+    #     if sim_properties.verbosity > 1:
+    #         print("Stagnant front is only supported with universal tip asymptote. Continuing...")
+    #     stagnant = np.full((EltsTipNew.size,), False, dtype=bool)
 
     if stagnant.any():
         # if any tip cell with stagnant front calculate stress intensity factor for stagnant cells
@@ -1546,6 +1557,9 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
 
     # set leak off to zero if pressure below pore pressure
     LkOff[Fr_lstTmStp.pFluid <= mat_properties.porePressure] = 0.
+
+    if sim_properties.verbosity > 1:
+        print('Solving the EHL system with the new trial footprint')
 
     w_n_plus1, pf_n_plus1, data = solve_width_pressure(Fr_lstTmStp,
                                                       sim_properties,
@@ -1669,7 +1683,8 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
                                                                Fr_lstTmStp,
                                                                mat_properties,
                                                                sim_properties,
-                                                               timeStep,
+                                                               fluidProp=fluid_properties,
+                                                               dt=timeStep,
                                                                Kprime_k=Kprime_k,
                                                                Eprime_k=Eprime_k)
 

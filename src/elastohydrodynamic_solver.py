@@ -61,6 +61,117 @@ def finiteDiff_operator_laminar(w, EltCrack, muPrime, Mesh, InCrack, neiInCrack,
 
     return FinDiffOprtr
 
+#-----------------------------------------------------------------------------------------------------------------------
+
+
+def finiteDiff_operator_Herschel_Bulkley(w, EltCrack, C, sigma0, n, tau_o, k, Mesh, InCrack, neiInCrack,
+                                         sparse_flag=False):
+    """
+    The function evaluate the finite difference 5 point stencil matrix, i.e. the A matrix in the ElastoHydrodynamic
+    equations in e.g. Dontsov and Peirce 2008. The matrix is evaluated with the laminar flow assumption.
+
+    Args:
+        w (ndarray):            -- the width of the trial fracture.
+        EltCrack (ndarray):     -- the list of elements inside the fracture.
+        muPrime (ndarray):      -- the scaled local viscosity of the injected fluid (12 * viscosity).
+        Mesh (CartesianMesh):   -- the mesh.
+        InCrack (ndarray):      -- an array specifying whether elements are inside the fracture or not with
+                                   1 or 0 respectively.
+        neiInCrack (ndarray):   -- an ndarray giving indices of the neighbours of all the cells in the crack, in the
+                                   EltCrack list.
+        sparse_flag (bool):     -- if true, the finite difference operator will be given as a sparse matrix.
+
+    Returns:
+        FinDiffOprtr (ndarray): -- the finite difference matrix.
+
+    """
+
+    if sparse_flag:
+        FinDiffOprtr = sparse.lil_matrix((w.size, w.size), dtype=np.float64)
+    else:
+        FinDiffOprtr = np.zeros((w.size, w.size), dtype=np.float64)
+
+    dx = Mesh.hx
+    dy = Mesh.hy
+
+    # width on edges; evaluated by averaging the widths of adjacent cells
+    wLftEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 0]]) / 2
+    wRgtEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 1]]) / 2
+    wBtmEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 2]]) / 2
+    wTopEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 3]]) / 2
+
+    # pressure gradient data structure. The rows store pressure gradient in the following order.
+    # 0 - left edge in x-direction    # 1 - right edge in x-direction
+    # 2 - bottom edge in y-direction  # 3 - top edge in y-direction
+    # 4 - left edge in y-direction    # 5 - right edge in y-direction
+    # 6 - bottom edge in x-direction  # 7 - top edge in x-direction
+
+    dp = np.zeros((8, Mesh.NumberOfElts), dtype=np.float64)
+    (dpdxLft, dpdxRgt, dpdyBtm, dpdyTop) = pressure_gradient(w, C, sigma0, Mesh, EltCrack, InCrack)
+    dp[0, EltCrack] = dpdxLft
+    dp[1, EltCrack] = dpdxRgt
+    dp[2, EltCrack] = dpdyBtm
+    dp[3, EltCrack] = dpdyTop
+    # linear interpolation for pressure gradient on the edges where central difference not available
+    dp[4, EltCrack] = (dp[2, Mesh.NeiElements[EltCrack, 0]] + dp[3, Mesh.NeiElements[EltCrack, 0]] + dp[2, EltCrack] +
+                       dp[3, EltCrack]) / 4
+    dp[5, EltCrack] = (dp[2, Mesh.NeiElements[EltCrack, 1]] + dp[3, Mesh.NeiElements[EltCrack, 1]] + dp[2, EltCrack] +
+                       dp[3, EltCrack]) / 4
+    dp[6, EltCrack] = (dp[0, Mesh.NeiElements[EltCrack, 2]] + dp[1, Mesh.NeiElements[EltCrack, 2]] + dp[0, EltCrack] +
+                       dp[1, EltCrack]) / 4
+    dp[7, EltCrack] = (dp[0, Mesh.NeiElements[EltCrack, 3]] + dp[1, Mesh.NeiElements[EltCrack, 3]] + dp[0, EltCrack] +
+                       dp[1, EltCrack]) / 4
+
+    # magnitude of pressure gradient vector on the cell edges. Used to calculate the friction factor
+    dpLft = (dp[0, EltCrack] ** 2 + dp[4, EltCrack] ** 2) ** 0.5
+    dpRgt = (dp[1, EltCrack] ** 2 + dp[5, EltCrack] ** 2) ** 0.5
+    dpBtm = (dp[2, EltCrack] ** 2 + dp[6, EltCrack] ** 2) ** 0.5
+    dpTop = (dp[3, EltCrack] ** 2 + dp[7, EltCrack] ** 2) ** 0.5
+
+    dpLft[dpLft == 0] = 1e-10
+    dpRgt[dpRgt == 0] = 1e-10
+    dpTop[dpTop == 0] = 1e-10
+    dpBtm[dpBtm == 0] = 1e-10
+
+    cond = np.zeros((4, EltCrack.size), dtype=np.float64)
+    var1 = n / (4. * n + 2.) * (1. / 2. / k) ** (1. / n)
+    var2 = 1/n - 1.
+    var3 = 2. + 1/n
+    var4 = 1. + 1/n
+    var5 = n / (n + 1.)
+
+    eps = 1e-2
+    shift = 1
+    x = np.maximum(1 - 2 * tau_o / wLftEdge / dpLft, np.zeros_like(wLftEdge))
+    cond[0, :] = var1 * dpLft ** var2 * wLftEdge ** var3 * x**var4 * 1 / (1 + np.e**(-(x - 0.05) / eps)) * \
+                 (1 + 2*tau_o / wLftEdge / dpLft * var5)
+    x = np.maximum(1 - 2*tau_o / wRgtEdge / dpRgt, np.zeros_like(wLftEdge))
+    cond[1, :] = var1 * dpRgt ** var2 * wRgtEdge ** var3 * x**var4 * 1 / (1 + np.e**(-(x - 0.05) / eps)) * \
+                 (1 + 2*tau_o / wRgtEdge / dpRgt * var5)
+    x = np.maximum(1 - 2*tau_o / wBtmEdge / dpBtm, np.zeros_like(wLftEdge))
+    cond[2, :] = var1 * dpBtm ** var2 * wBtmEdge ** var3 * x**var4 * 1 / (1 + np.e**(-(x - 0.05) / eps)) * \
+                 (1 + 2*tau_o / wBtmEdge / dpBtm * var5)
+    x = np.maximum(1 - 2*tau_o / wTopEdge / dpTop, np.zeros_like(wLftEdge))
+    cond[3, :] = var1 * dpTop ** var2 * wTopEdge ** var3 * x**var4 * 1 / (1 + np.e**(-(x - 0.05) / eps)) * \
+                 (1 + 2*tau_o / wTopEdge / dpTop * var5)
+
+    # cond[cond < 0] = 0
+    # muprime = 12 * 1.1e-3
+    #
+    # cond[0, :] = wLftEdge ** 3 / muprime
+    # cond[1, :] = wRgtEdge ** 3 / muprime
+    # cond[2, :] = wBtmEdge ** 3 / muprime
+    # cond[3, :] = wTopEdge ** 3 / muprime
+
+    indx_elts = np.arange(len(EltCrack))
+    FinDiffOprtr[indx_elts, indx_elts] = -(cond[0, :] + cond[1, :]) / dx ** 2 - (cond[2, :] + cond[3, :]) / dy ** 2
+    FinDiffOprtr[indx_elts, neiInCrack[indx_elts, 0]] = cond[0, :] / dx ** 2
+    FinDiffOprtr[indx_elts, neiInCrack[indx_elts, 1]] = cond[1, :] / dx ** 2
+    FinDiffOprtr[indx_elts, neiInCrack[indx_elts, 2]] = cond[2, :] / dy ** 2
+    FinDiffOprtr[indx_elts, neiInCrack[indx_elts, 3]] = cond[3, :] / dy ** 2
+
+    return FinDiffOprtr
+
 
 #-----------------------------------------------------------------------------------------------------------------------
 
@@ -1028,7 +1139,7 @@ def MakeEquationSystem_ViscousFluid_pressure_substituted_deltaP(solk, interItr, 
     """
 
     (to_solve, to_impose, wLastTS, pfLastTS, imposed_val, EltCrack, Mesh, dt, Q, C, muPrime, rho, InCrack, LeakOff,
-     sigma0, turb, dgrain, gravity, active, wc_to_impose, wc, cf, neiInCrack) = args
+     sigma0, turb, dgrain, gravity, active, wc_to_impose, wc, cf, neiInCrack, fluid_prop) = args
 
     wcNplusOne = np.copy(wLastTS)
     wcNplusOne[to_solve] += solk[:len(to_solve)]
@@ -1050,13 +1161,22 @@ def MakeEquationSystem_ViscousFluid_pressure_substituted_deltaP(solk, interItr, 
                                                                             InCrack, rho, vkm1, C, sigma0,
                                                                             dgrain, to_solve, active, to_impose)
     else:
-        FinDiffOprtr = finiteDiff_operator_laminar(wcNplusOne,
-                                                   EltCrack,
-                                                   muPrime,
-                                                   Mesh,
-                                                   InCrack,
-                                                   neiInCrack)
+        # FinDiffOprtr = finiteDiff_operator_laminar(wcNplusOne,
+        #                                            EltCrack,
+        #                                            muPrime,
+        #                                            Mesh,
+        #                                            InCrack,
+        #                                            neiInCrack)
         vk = vkm1
+        FinDiffOprtr = finiteDiff_operator_Herschel_Bulkley(wcNplusOne,
+                                                   EltCrack,
+                                                   C,
+                                                   sigma0,
+                                                   fluid_prop.n,
+                                                   fluid_prop.T0,
+                                                   fluid_prop.k,
+                                                   Mesh,
+                                                   InCrack, neiInCrack)
 
     if gravity:
         G = Gravity_term(wcNplusOne,
@@ -1128,9 +1248,24 @@ def MakeEquationSystem_ViscousFluid_pressure_substituted_deltaP(solk, interItr, 
                    dt * G[active] + \
                    dt * Q[active] / Mesh.EltArea - LeakOff[active] / Mesh.EltArea
 
+    to_del = []
+    for i in range(n_tip + n_act):
+            if not A[n_ch + i, :].any():
+                to_del.append(i)
+
+    deleted = n_ch + np.asarray(to_del)
+    A = np.delete(A, deleted, 0)
+    A = np.delete(A, deleted, 1)
+    S = np.delete(S, deleted)
+
     # indices of solved width, pressure and active width constraint in the solution
-    indices = [ch_indxs, tip_indxs, act_indxs]
+    indices = [ch_indxs, tip_indxs, act_indxs, to_del]
     interItr_kp1 = (vk, below_wc)
+
+    if np.isnan(A).any():
+        print('fpimd')
+    if np.isnan(S).any():
+        print('fpimd')
 
     return A, S, interItr_kp1, indices
 
@@ -1180,12 +1315,14 @@ def MakeEquationSystem_volumeControl(w_lst_tmstp, wTip, EltChannel, EltTip, sigm
 #-----------------------------------------------------------------------------------------------------------------------
 
 
-def Elastohydrodynamic_ResidualFun(solk, system_func, *args, interItr=None):
+def Elastohydrodynamic_ResidualFun(solk, system_func, interItr, *args):
     """
     This function gives the residual of the solution for the system of equations formed using the given function.
     """
     A, S, interItr, indices = system_func(solk, interItr, *args)
-    return np.dot(A, solk) - S, interItr, indices
+    Fx_red = np.dot(A, np.delete(solk, len(indices[0]) + np.asarray(indices[3]))) - S
+    Fx = populate_full(indices, Fx_red)
+    return Fx, interItr, indices
 
 #-----------------------------------------------------------------------------------------------------------------------
 
@@ -1215,7 +1352,7 @@ def MakeEquationSystem_volumeControl_symmetric(w_lst_tmstp, wTip_sym, EltChannel
 
 
 def Picard_Newton(Res_fun, sys_fun, guess, TypValue, interItr_init, sim_prop, *args, relax=1.0,
-                  PicardPerNewton=1000, perf_node=None):
+                  PicardPerNewton=1, perf_node=None):
     """
     Mixed Picard Newton solver for nonlinear systems.
 
@@ -1251,19 +1388,35 @@ def Picard_Newton(Res_fun, sys_fun, guess, TypValue, interItr_init, sim_prop, *a
 
         solkm1 = solk
         if (k + 1) % PicardPerNewton == 0:
-            Fx, interItr, indices = Res_fun(solk, sys_fun, *args, interItr,)
-            if newton % 3 == 0:
-                Jac = Jacobian(Res_fun, solk, TypValue, *args, interItr)
-            dx = np.linalg.solve(Jac, -Fx)
+            Fx, interItr, indices = Elastohydrodynamic_ResidualFun(solk, sys_fun, interItr, *args)
+            if newton % 1 == 0:
+                print("evaluating Jacobian")
+                Jac = Jacobian(Elastohydrodynamic_ResidualFun, sys_fun, solk, TypValue, True, interItr, *args)
+
+                to_del = []
+                for i in range(len(Fx)):
+                    if not Jac[i, :].any():
+                        to_del.append(i)
+                Jac = np.delete(Jac, to_del, 0)
+                Jac = np.delete(Jac, to_del, 1)
+                Fx = np.delete(Fx, to_del)
+                print("done")
+
+                dx = np.linalg.solve(Jac, -Fx)
+                dx_full = np.zeros(len(solk))
+                dx_full[np.setdiff1d(np.arange(len(Fx)), to_del)] = dx
+
             solk = solkm1 + dx
             newton += 1
         else:
             try:
                 (A, b, interItr, indices) = sys_fun(solk, interItr, *args)
                 perfNode_linSolve = instrument_start("linear system solve", perf_node)
-                solk = (1 - relax) * solkm1 + relax * np.linalg.solve(A, b)
-            except np.linalg.linalg.LinAlgError:
-                print('singlular matrix!')
+                # solk = (1 - relax) * solkm1 + relax * np.linalg.solve(A, b)
+                sol = np.linalg.solve(A, b)
+                solk = get_complete_solution(sol, indices, *args)
+            except np.linalg.linalg.LinAlgError as e:
+                print(e)
                 solk = np.full((len(solk),), np.nan, dtype=np.float64)
                 if perf_node is not None:
                     instrument_close(perf_node, perfNode_linSolve, None,
@@ -1296,24 +1449,30 @@ def Picard_Newton(Res_fun, sys_fun, guess, TypValue, interItr_init, sim_prop, *a
 
 #-----------------------------------------------------------------------------------------------------------------------
 
-def Jacobian(Residual_function, x, TypValue, *args, central=False, interItr=None):
+def Jacobian(Residual_function, sys_func, x, TypValue, central=False, interItr=None, *args):
     """
     This function returns the Jacobian of the given function.
     """
 
-    (Fx, interItr) = Residual_function(x, interItr, *args)
+    Fx, interItr, indices = Residual_function(x, sys_func, interItr, *args)
     Jac = np.zeros((len(x), len(x)), dtype=np.float64)
     for i in range(0, len(x)):
-        Epsilon = np.finfo(float).eps ** 0.5 * max(x[i], TypValue[i])
+        Epsilon = np.finfo(float).eps ** 0.5 * abs(max(x[i], TypValue[i]))
+        if Epsilon == 0:
+            Epsilon = np.finfo(float).eps ** 0.5
         xip = np.copy(x)
         xip[i] = xip[i] + Epsilon
         if central:
             xin = np.copy(x)
             xin[i] = xin[i]-Epsilon
-            Jac[:,i] = (Residual_function(xip,interItr,*args)[0] - Residual_function(xin,interItr,*args)[0])/(2*Epsilon)
+            Jac[:,i] = (Residual_function(xip, sys_func, interItr, *args)[0] - Residual_function(xin, sys_func, interItr, *args)[0])/(2*Epsilon)
+            if np.isnan(Jac[:, i]).any():
+                print('jacobian nan')
+                print('stop')
         else:
-            (Fxi, interItr) = Residual_function(xip, interItr, *args)
+            Fxi, interItr, indices = Residual_function(xip, sys_func, interItr, *args)
             Jac[:, i] = (Fxi - Fx) / Epsilon
+            # print(repr(i))
 
     return Jac
 
@@ -1347,6 +1506,7 @@ def check_covergance(solk, solkm1, indices, tol):
         norm_w = np.linalg.norm(abs(solk[indices[0]] - solkm1[indices[0]]) / abs(solkm1[indices[0]]))
 
     norm_p = np.linalg.norm(abs(solk[indices[1]] - solkm1[indices[1]]) / abs(solkm1[indices[1]]))
+
     if len(indices[2]) > 0:
         norm_tr = np.linalg.norm(abs(solk[indices[2]] - solkm1[indices[2]]) / abs(solkm1[indices[2]]))
     else:
@@ -1354,7 +1514,7 @@ def check_covergance(solk, solkm1, indices, tol):
     norm = (norm_w + norm_p + norm_tr) / 3
 
     converged = (norm_w <= tol and norm_p <= tol and norm_tr <= tol)
-
+    # print('w= ' + repr(norm_w) + ' p= ' + repr(norm_p) + ' tr= ' + repr(norm_tr))
     return converged, norm
 
 #-----------------------------------------------------------------------------------------------------------------------
@@ -1460,3 +1620,161 @@ def calculate_fluid_flow_characteristics_laminar(w, C, sigma0, Mesh, EltCrack, I
 
 #-----------------------------------------------------------------------------------------------------------------------
 
+def Anderson(sys_fun, guess, interItr_init, sim_prop, *args, relax=1.0,
+                  m_Anderson=3, perf_node=None):
+    """
+    Anderson solver for non linear system.
+    Args:
+        sys_fun (function):                 -- The function giving the system A, b for the Anderson solver to solve the
+                                               linear system of the form Ax=b.
+        guess (ndarray):                    -- The initial guess.
+        interItr_init (ndarray):            -- Initial value of the variable(s) exchanged between the iterations (if
+                                               any).
+        sim_prop (SimulationProperties):    -- the SimulationProperties object giving simulation parameters.
+        relax (float):                      -- The relaxation factor.
+        args (tuple):                       -- arguments given to the residual and systems functions.
+        perf_node (IterationProperties):    -- the IterationProperties object passed to be populated with data.
+        m_Anderson                          -- value of the recursive time steps to consider for the anderson iteration
+    Returns:
+        - Xks[mk+1] (ndarray)  -- final solution at the end of the iterations.
+        - data (tuple)         -- any data to be returned
+    """
+
+    ## Initialization of solution vectors
+    xks = np.full((m_Anderson+1,guess.size),0.)
+    Fks = np.full((m_Anderson+1,guess.size),0.)
+    Gks = np.full((m_Anderson+1,guess.size),0.)
+
+    ## Initialization of iteration parameters
+    k = 0
+    normlist = []
+    interItr = interItr_init
+    converged = False
+    try:
+        perfNode_linSolve = instrument_start("linear system solve", perf_node)
+        # First iteration
+        xks[0,::] = np.array([guess])                                       # xo
+        (A, b, interItr, indices) = sys_fun(xks[0,::], interItr, *args)     # assembling A and b
+        # Gks[0,::] = np.linalg.solve(A, b)                                   # solve the linear system
+        sol = np.linalg.solve(A, b)
+        Gks[0, ::] = get_complete_solution(sol, indices, *args)
+        Fks[0,::] = Gks[0,::] - xks[0,::]
+        xks[1,::] = Gks[0,::]                                               # x1
+    except np.linalg.linalg.LinAlgError:
+        print('singular matrix!')
+        solk = np.full((len(xks[0]),), np.nan, dtype=np.float64)
+        if perf_node is not None:
+            instrument_close(perf_node, perfNode_linSolve, None,
+                             len(b), False, 'singular matrix', None)
+            perf_node.linearSolve_data.append(perfNode_linSolve)
+        return solk, None
+
+    while not converged:
+
+        try:
+            mk = np.min([k, m_Anderson-1])  # Asses the amount of solutions available for the least square problem
+
+            (A, b, interItr, indices) = sys_fun(xks[mk+1,::], interItr, *args)
+            perfNode_linSolve = instrument_start("linear system solve", perf_node)
+            if k < m_Anderson+1:
+                # Gks[mk+1,::] = np.linalg.solve(A, b)
+                sol = np.linalg.solve(A, b)
+                Gks[mk+1,::] = get_complete_solution(sol, indices, *args)
+                Fks[mk+1,::] = Gks[mk+1,::]-xks[mk+1,::]
+            else: # Rotate as to overwrite "oldest" solution and calculate new solution
+                Gks = np.roll(Gks,-1, axis=0)
+                # Gks[mk+1,::] = np.linalg.solve(A, b)
+                sol = np.linalg.solve(A, b)
+                Gks[mk + 1, ::] = get_complete_solution(sol, indices, *args)
+                Fks = np.roll(Fks, -1, axis=0)
+                Fks[mk+1,::] = Gks[mk+1,::]-xks[mk+1,::]
+
+            ## Setting up the Least square problem of Anderson
+            A_Anderson = np.transpose(Fks[:mk+1:1,::] - Fks[mk+1,::])
+            b_Anderson = - Fks[mk+1,::]
+
+            ## Solving the least square problem for the coefficients
+            omega_s = np.linalg.lstsq(A_Anderson, b_Anderson)[0]
+            omega_s = np.append(omega_s,1.0 - np.sum(omega_s))
+
+            ## Updating xk in a relaxed version
+            if k < m_Anderson + 1:
+                xks[mk+1,::] = (1-relax) * np.sum(np.transpose(np.multiply(np.transpose(xks[:mk+2,::]), omega_s)),axis=0)\
+                     + relax * np.sum(np.transpose(np.multiply(np.transpose(Gks[:mk+2,::]), omega_s)),axis=0)
+            else:
+                xks = np.roll(xks, -1, axis=0)
+                xks[mk+1,::] = (1-relax) * np.sum(np.transpose(np.multiply(np.transpose(xks[:mk+2,::]), omega_s)),axis=0)\
+                     + relax * np.sum(np.transpose(np.multiply(np.transpose(Gks[:mk+2,::]), omega_s)),axis=0)
+
+        except np.linalg.linalg.LinAlgError as e:
+            print(e)
+            solk = np.full((len(xks[mk]),), np.nan, dtype=np.float64)
+            if perf_node is not None:
+                instrument_close(perf_node, perfNode_linSolve, None,
+                                 len(b), False, 'singular matrix', None)
+                perf_node.linearSolve_data.append(perfNode_linSolve)
+            return solk, None
+
+        # if len(indices[3]) > 0:
+        #     translate = np.arange(len(solkm1))
+
+        ## Check for convergency of the solution
+        converged, norm = check_covergance(xks[0,::], xks[1,::], indices, sim_prop.toleranceEHL)
+        normlist.append(norm)
+        k = k + 1
+
+        if perf_node is not None:
+            instrument_close(perf_node, perfNode_linSolve, norm, len(b), True, None, None)
+            perf_node.linearSolve_data.append(perfNode_linSolve)
+
+        if k == sim_prop.maxSolverItrs:  # returns nan as solution if does not converge
+            print('Anderson iteration not converged after ' + repr(sim_prop.maxSolverItrs) + \
+                  ' iterations, norm:' + repr(norm))
+            solk = np.full((np.size(xks[0,::]),), np.nan, dtype=np.float64)
+            if perf_node is not None:
+                perfNode_linSolve.failure_cause = 'singular matrix'
+                perfNode_linSolve.status = 'failed'
+            return solk, None
+
+    if sim_prop.verbosity > 1:
+        print("Converged after " + repr(k) + " iterations")
+    data = interItr
+    return xks[0,::], data
+
+
+def get_complete_solution(sol, indices, *args):
+
+    (to_solve, to_impose, wLastTS, pfLastTS, imposed_val, EltCrack, Mesh, dt, Q, C, muPrime, rho, InCrack, LeakOff,
+     sigma0, turb, dgrain, gravity, active, wc_to_impose, wc, cf, neiInCrack, fluid_prop) = args
+
+    tip_act = np.concatenate((to_impose, active))
+
+    w = np.copy(wLastTS)
+    w[to_solve] += sol[:len(to_solve)]
+    w[to_impose] = imposed_val
+    w[active] = wc_to_impose
+
+    [ch_indxs, tip_indxs, act_indxs, deleted] = indices
+    # sol_full = np.empty(len(EltCrack))
+    # sol_full[:len(ch_indxs)] = sol[:len(ch_indxs)]
+    # sol_full[len(ch_indxs) + np.asarray(deleted, dtype=int)] = \
+    #     np.dot(C[np.ix_(tip_act[deleted], EltCrack)], w[EltCrack]) - pfLastTS[tip_act[deleted]]
+    # sol_full[len(ch_indxs) + np.setdiff1d(np.arange(len(tip_indxs) + len(act_indxs)), deleted)] = sol[len(ch_indxs):]
+
+    values = np.dot(C[np.ix_(tip_act[deleted], EltCrack)], w[EltCrack]) - pfLastTS[tip_act[deleted]]
+    sol_full2 = populate_full(indices, sol, values)
+
+    return sol_full2
+
+def populate_full(indices, sol, values=None):
+
+    [ch_indxs, tip_indxs, act_indxs, deleted] = indices
+    sol_full = np.empty(len(ch_indxs) + len(tip_indxs) + len(act_indxs))
+    sol_full[:len(ch_indxs)] = sol[:len(ch_indxs)]
+
+    if values is None:
+        values = np.zeros(len(deleted))
+    sol_full[len(ch_indxs) + np.asarray(deleted, dtype=int)] = values
+    sol_full[len(ch_indxs) + np.setdiff1d(np.arange(len(tip_indxs) + len(act_indxs)), deleted)] = sol[len(ch_indxs):]
+
+    return sol_full
