@@ -634,6 +634,7 @@ class SimulationProperties:
         self.plotVar = simul_param.plot_var
         self.saveTSJump = simul_param.save_TS_jump
         self.saveTimePeriod = simul_param.save_time_period
+        self.saveToJson = simul_param.save_to_json
 
         # solver type
         self.elastohydrSolver = simul_param.elastohydr_solver

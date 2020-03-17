@@ -1686,23 +1686,7 @@ def reconstruct_front_continuous(sgndDist_k, anularegion, Ribbon, eltsChannel, m
 
         recompute_front = False
         float_precision = np.float64
-        integer_precision = int
         mac_precision = 10*np.finfo(float).eps
-        """
-        a := diagnal of the mesh
-        b := min size of the front in the cell
-        b/a := min_ratio_front_and_edge_size = 0.01
-                         ___|_______|__   
-                            |      /|
-                            |     / |
-                            |  a /  |
-                            |   /   |
-                            |  /    |
-                            | /    b/
-                         ___|/_____/|___
-                            |       |   
-        """
-        min_ratio_front_and_edge_size = 0.01
         area_of_a_cell = mesh.hx * mesh.hy
 
         """
@@ -2208,7 +2192,7 @@ def reconstruct_front_continuous(sgndDist_k, anularegion, Ribbon, eltsChannel, m
                     # n=len(xintersectionsfromzerovertex)
                     # for i in range(0,n) :
                     #     plt.plot([mesh.VertexCoor[vertexID[(i+1)%n], 0], xintersectionsfromzerovertex[i]], [mesh.VertexCoor[vertexID[(i+1)%n], 1], yintersectionsfromzerovertex[i]], '-r')
-                          ##plt.plot([mesh.CenterCoor[listofTIPcells[(i+1)%n], 0], xintersectionsfromzerovertex[i]],[mesh.CenterCoor[listofTIPcells[(i+1)%n], 1], yintersectionsfromzerovertex[i]], '-r')
+                    #       #plt.plot([mesh.CenterCoor[listofTIPcells[(i+1)%n], 0], xintersectionsfromzerovertex[i]],[mesh.CenterCoor[listofTIPcells[(i+1)%n], 1], yintersectionsfromzerovertex[i]], '-r')
                     # # plt.plot(xred, yred, '.',color='red' )
                     # # plt.plot(xgreen, ygreen, '.',color='yellow')
                     # # plt.plot(xblack, yblack, '.',color='black')
