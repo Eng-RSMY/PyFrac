@@ -36,6 +36,15 @@ def C2(delta):
 
 # ----------------------------------------------------------------------------------------------------------------------
 
+def TipAsym_k_kt(dist, *args):
+    """Residual function for the near-field k expansion (Garagash & Detournay, 2011)"""
+
+    (wEltRibbon, Kprime, Eprime, muPrime, Cbar, DistLstTSEltRibbon, dt) = args
+
+    return -wEltRibbon + ( Kprime / Eprime ) ** 2 * dist ** (1/2)
+
+# ----------------------------------------------------------------------------------------------------------------------
+
 def TipAsym_k_exp(dist, *args):
     """Residual function for the near-field k expansion (Garagash & Detournay, 2011)"""
 
@@ -324,7 +333,8 @@ def FindBracket_dist(w, Kprime, Eprime, muPrime, Cprime, DistLstTS, dt, mesh, Re
 
 # ----------------------------------------------------------------------------------------------------------------------
 
-def TipAsymInversion(w, frac, matProp, simParmtrs, dt=None, Kprime_k=None, Eprime_k=None, perfNode=None):
+def TipAsymInversion(w, frac, matProp, simParmtrs, dt=None, Kprime_k=None, Eprime_k=None, delta_Kprime_k =None,
+                     dist_to_Kjump=None, perfNode=None):
     """ 
     Evaluate distance from the front using tip assymptotics according to the given regime, given the fracture width in
     the ribbon cells.
@@ -342,24 +352,32 @@ def TipAsymInversion(w, frac, matProp, simParmtrs, dt=None, Kprime_k=None, Eprim
         dist (ndarray):                     -- distance (unsigned) from the front to the ribbon cells.
     """
 
-    if Kprime_k is None:
+    if Kprime_k == None:
         Kprime = matProp.Kprime[frac.EltRibbon]
     else:
         Kprime = Kprime_k
 
-    if Eprime_k is None:
+    if Eprime_k == None:
         Eprime = np.full((frac.EltRibbon.size,), matProp.Eprime)
     else:
         Eprime = Eprime_k
+
+    if delta_Kprime_k == None:
+        delta_Kprime_k = np.zeros(len(frac.EltRibbon))
+
+    if dist_to_Kjump == None:
+        dist_to_Kjump = np.zeros(len(frac.EltRibbon))
 
     if simParmtrs.get_tipAsymptote() == 'U':
         ResFunc = TipAsym_Universal_zrthOrder_Res
     elif simParmtrs.get_tipAsymptote() == 'U1':
         ResFunc = TipAsym_Universal_1stOrder_Res
     elif simParmtrs.get_tipAsymptote() == 'K':
-        return w[frac.EltRibbon] ** 2 * (Eprime / Kprime) ** 2
+        ResFunc = TipAsym_k_kt
+        #return w[frac.EltRibbon] ** 2 * (Eprime / Kprime) ** 2
     elif simParmtrs.get_tipAsymptote() == 'Kt':
-        return w[frac.EltRibbon] ** 2 * (Eprime / Kprime) ** 2
+        ResFunc = TipAsym_k_kt
+        #return w[frac.EltRibbon] ** 2 * (Eprime / Kprime) ** 2
     elif simParmtrs.get_tipAsymptote() == 'M':
         ResFunc = TipAsym_viscStor_Res
     elif simParmtrs.get_tipAsymptote() == 'Mt':
@@ -371,8 +389,9 @@ def TipAsymInversion(w, frac, matProp, simParmtrs, dt=None, Kprime_k=None, Eprim
     elif simParmtrs.get_tipAsymptote() == 'M_MDR':
         ResFunc = TipAsym_M_MDR_Res
 
+    Kprime_act = calculateKprimeAct(Kprime, -frac.sgndDist[frac.EltRibbon], dist_to_Kjump, delta_Kprime_k, frac.mesh)
     # checking propagation condition
-    stagnant = np.where(Kprime * (-frac.sgndDist[frac.EltRibbon])**0.5 / (
+    stagnant = np.where(Kprime_act * (-frac.sgndDist[frac.EltRibbon])**0.5 / (
                                         Eprime * w[frac.EltRibbon]) > 1)[0]
     moving = np.arange(frac.EltRibbon.shape[0])[~np.in1d(frac.EltRibbon, frac.EltRibbon[stagnant])]
 
@@ -384,16 +403,36 @@ def TipAsymInversion(w, frac, matProp, simParmtrs, dt=None, Kprime_k=None, Eprim
                             frac.sgndDist[frac.EltRibbon[moving]],
                             dt,
                             frac.mesh,
+                            dist_to_Kjump,
+                            delta_Kprime_k,
                             ResFunc)
+
+    # a, b = FindBracket_dist(w[frac.EltRibbon[moving]],
+    #                         Kprime[moving],
+    #                         Eprime[moving],
+    #                         frac.muPrime[frac.EltRibbon[moving]],
+    #                         matProp.Cprime[frac.EltRibbon[moving]],
+    #                         frac.sgndDist[frac.EltRibbon[moving]],
+    #                         dt,
+    #                         frac.mesh,
+    #                         ResFunc)
 
     dist = -frac.sgndDist[frac.EltRibbon]
     for i in range(0, len(moving)):
+        # TipAsmptargs = (w[frac.EltRibbon[moving[i]]],
+        #                 Kprime[moving[i]],
+        #                 Eprime[moving[i]],
+        #                 frac.muPrime[frac.EltRibbon[moving[i]]],
+        #                 matProp.Cprime[frac.EltRibbon[moving[i]]],
+        #                 -frac.sgndDist[frac.EltRibbon[moving[i]]],
+        #                 dt)
         TipAsmptargs = (w[frac.EltRibbon[moving[i]]],
                         Kprime[moving[i]],
                         Eprime[moving[i]],
                         frac.muPrime[frac.EltRibbon[moving[i]]],
                         matProp.Cprime[frac.EltRibbon[moving[i]]],
                         -frac.sgndDist[frac.EltRibbon[moving[i]]],
+
                         dt)
         try:
             if perfNode is None:
@@ -566,3 +605,12 @@ def find_zero_vertex(Elts, level_set, mesh):
             zero_vertex[i] = 3
 
     return zero_vertex
+
+#-----------------------------------------------------------------------------------------------------------------------
+
+def calculateKprimeAct(Kprime, dist, dist_to_Kjump, delta_Kprime, mesh):
+    """
+    Calculating the actual value of the toughness to use for the approximation.
+    """
+
+    return Kprime + 1 / (1 + np.exp(-(dist - dist_to_Kjump)/mesh.regularization_exponent)) * delta_Kprime
