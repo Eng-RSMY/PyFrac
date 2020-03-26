@@ -172,7 +172,8 @@ class Fracture:
         self.InCrack[self.EltCrack] = 1
         self.wHist = np.copy(self.w)
         self.source = np.intersect1d(injection.sourceElem, self.EltCrack)
-
+        self.effVisc = np.zeros((4, self.mesh.NumberOfElts), dtype=np.float32)
+        
         self.process_fracture_front()
 
         # local viscosity

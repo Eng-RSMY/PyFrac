@@ -160,7 +160,9 @@ def TipAsym_Hershcel_Burkley_Res(dist, *args):
     ell = (Kprime**(n + 2) / Mprime / Vel**n / Eprime**(n + 1))**(2 / (2 - n))
     xt = np.sqrt(dist / ell)
     T0t = T0 * 2 * Eprime * ell / Kprime / Kprime
-    wt = ((wEltRibbon * Eprime / Kprime / np.sqrt(dist))**alpha - (np.sqrt(4 * np.pi * T0t) * xt)**alpha)**(1 / alpha)
+    # wtTau = 2 * np.sqrt(np.pi * T0t) * xt
+    wtTau2 = np.sqrt(8 * np.pi * T0 / Eprime) * dist
+    wt = ((wEltRibbon * Eprime / Kprime / np.sqrt(dist))**alpha - wtTau2**alpha)**(1 / alpha)
 
     theta = 0.0452 * n**2 - 0.178 * n + 0.1753
     Vm = 1 - wt ** -((2 + n) / (1 + theta))
@@ -171,7 +173,7 @@ def TipAsym_Hershcel_Burkley_Res(dist, *args):
     Bmt = (64 * (1 + n) ** 2 / (3 * n *(4 + n)) * np.tan(3 * np.pi * n / (4 * (1 + n))))**(1 / (2 + 2 * n))
 
     dt1 = dmt * dm * Vmt * Vm * \
-          (Bm**((2 + n) / n) * Vm**((1 + theta) / n) + X / wt * Bmt**(2 * (1 + n) / n) * Vm**((1 + theta) / n)) / \
+          (Bm**((2 + n) / n) * Vmt**((1 + theta) / n) + X / wt * Bmt**(2 * (1 + n) / n) * Vm**((1 + theta) / n)) / \
           (dmt * Vmt * Bm**((2 + n) / n) * Vmt**((1 + theta) / n) +
            dm * Vm * X / wt * Bmt**(2 * (1 + n) / n) * Vm**((1 + theta) / n))
 
@@ -181,6 +183,21 @@ def TipAsym_Hershcel_Burkley_Res(dist, *args):
 
 # ----------------------------------------------------------------------------------------------------------------------
 
+def TipAsym_Hershcel_Burkley_M_vertex_Res(dist, *args):
+    
+    (wEltRibbon, Kprime, Eprime, muPrime, Cbar, Dist_LstTS, dt, n, k, T0) = args
+    
+    Mprime = 2**(n + 1) * (2 * n + 1)**n / n**n * k
+    Vel = (dist - Dist_LstTS) / dt
+    Bm = (2 * (2 + n)**2 / n * np.tan(np.pi * n / (2 + n)))**(1 / (2 + n))
+    
+    return wEltRibbon - Bm * (Mprime * Vel**n / Eprime) ** (1 / (2 + n)) * dist ** (2 / (2 + n))
+
+    
+
+#-----------------------------------------------------------------------------------------------------------------------
+
+    
 def TipAsym_variable_Toughness_Res(dist, *args):
 
     (wEltRibbon, Eprime, Kprime_func, anisotropic_flag, alpha, zero_vertex, center_coord) = args
@@ -293,6 +310,8 @@ def TipAsymInversion(w, frac, matProp, simParmtrs, fluidProp=None, dt=None, Kpri
         ResFunc = TipAsym_M_MDR_Res
     elif simParmtrs.get_tipAsymptote() == 'HBF':
         ResFunc = TipAsym_Hershcel_Burkley_Res
+    elif simParmtrs.get_tipAsymptote() == 'M_HBF':
+        ResFunc = TipAsym_Hershcel_Burkley_M_vertex_Res
     else:
         raise SystemExit("Tip asymptote type not supported!")
 
@@ -314,7 +333,7 @@ def TipAsymInversion(w, frac, matProp, simParmtrs, fluidProp=None, dt=None, Kpri
 
     dist = -frac.sgndDist[frac.EltRibbon]
     for i in range(0, len(moving)):
-        if simParmtrs.get_tipAsymptote() == 'HBF':
+        if 'HBF' in simParmtrs.get_tipAsymptote():
             TipAsmptargs = (w[frac.EltRibbon[moving[i]]],
                         Kprime[moving[i]],
                         Eprime[moving[i]],
@@ -504,3 +523,4 @@ def find_zero_vertex(Elts, level_set, mesh):
             zero_vertex[i] = 3
 
     return zero_vertex
+

@@ -51,7 +51,9 @@ def TipAsym_res_Herschel_Bulkley_d_given(w, *args):
     ell = (Kprime ** (n + 2) / Mprime / Vel ** n / Eprime ** (n + 1)) ** (2 / (2 - n))
     xt = np.sqrt(dist / ell)
     T0t = T0 * 2 * Eprime * ell / Kprime ** 2
-    wt = ((w * Eprime / Kprime / np.sqrt(dist)) ** alpha - (np.sqrt(4 * np.pi * T0t) * xt) ** alpha) ** (
+    wtTau = np.sqrt(4 * np.pi * T0t) * xt
+    wtTau2 = np.sqrt(8 * np.pi * T0 / Eprime) * dist
+    wt = ((w * Eprime / Kprime / np.sqrt(dist)) ** alpha - wtTau2 ** alpha) ** (
                 1 / alpha)
 
     theta = 0.0452 * n ** 2 - 0.178 * n + 0.1753
@@ -63,7 +65,7 @@ def TipAsym_res_Herschel_Bulkley_d_given(w, *args):
     Bmt = (64 * (1 + n) ** 2 / (3 * n * (4 + n)) * np.tan(3 * np.pi * n / (4 * (1 + n)))) ** (1 / (2 + 2 * n))
 
     dt1 = dmt * dm * Vmt * Vm * \
-          (Bm ** ((2 + n) / n) * Vm ** ((1 + theta) / n) + X / wt * Bmt ** (2 * (1 + n) / n) * Vm ** (
+          (Bm ** ((2 + n) / n) * Vmt ** ((1 + theta) / n) + X / wt * Bmt ** (2 * (1 + n) / n) * Vm ** (
                       (1 + theta) / n)) / \
           (dmt * Vmt * Bm ** ((2 + n) / n) * Vmt ** ((1 + theta) / n) +
            dm * Vm * X / wt * Bmt ** (2 * (1 + n) / n) * Vm ** ((1 + theta) / n))
@@ -229,6 +231,7 @@ def VolumeTriangle(dist, *param):
          ) / Eprime ** 0.37037
 
     elif regime == 'HBF':
+    # elif 'HBF' in regime:
         args_HB = (dist, Kprime, Eprime, muPrime, Cbar, Vel, fluid_prop.n, fluid_prop.k, fluid_prop.T0)
         # vo1 = em * quad(moment_1_func, 0, dist, args_HB)[0]
 
@@ -237,7 +240,13 @@ def VolumeTriangle(dist, *param):
 
         # print('ratio = ' + repr(vo1/vo2 - 1))
         return vo2
-
+    elif regime == 'M_HBF':
+        n = fluid_prop.n
+        k = fluid_prop.k
+        Mprime = 2**(n + 1) * (2 * n + 1)**n / n**n * k
+        Bm = (2 * (2 + n)**2 / n * np.tan(np.pi * n / (2 + n)))**(1 / (2 + n))
+        
+        return Bm * (Mprime * Vel**n / Eprime) ** (1 / (2 + n)) * dist ** ((4 + n) / (2 + n)) * dist * (2 + n) * (1 / (4 + n) - 1 / (6 + 2 *n))
 
 def Area(dist, *param):
     """Gives Area under the tip depending on the regime identifier ;  
@@ -292,12 +301,22 @@ def Area(dist, *param):
         return (0.242623 * dist ** 1.74074 * Vel ** 0.481481 * muPrime ** 0.259259 * density ** 0.111111
          ) / Eprime ** 0.37037
 
-    elif regime == 'HBF':
+    # elif regime == 'HBF':
+    elif 'HBF' in regime:
+        
         args_HB = (dist, Kprime, Eprime, muPrime, Cbar, Vel, fluid_prop.n, fluid_prop.k, fluid_prop.T0)
         # return quad(moment_0_func, 0, dist, args_HB)[0]
 
         (M0, M1) = MomentsTipAssymp_HBF(dist, *args_HB)
         return M0
+    elif regime == 'M_HBF':
+        n = fluid_prop.n
+        k = fluid_prop.k
+        Mprime = 2**(n + 1) * (2 * n + 1)**n / n**n * k
+        Bm = (2 * (2 + n)**2 / n * np.tan(np.pi * n / (2 + n)))**(1 / (2 + n))
+        
+        return Bm * (Mprime * Vel**n / Eprime) ** (1 / (2 + n)) * ((2 + n) * dist**((4 + n)/(2 + n)))/(4 + n)
+        
 
 def Integral_over_cell(EltTip, alpha, l, mesh, function, frac=None, mat_prop=None, fluid_prop=None, Vel=None,
                        Kprime=None, Eprime=None, Cprime=None, stagnant=None, KIPrime=None, dt=None, arrival_t=None):

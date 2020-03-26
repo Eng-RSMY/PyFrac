@@ -734,7 +734,7 @@ def injection_extended_footprint(w_k, Fr_lstTmStp, C, timeStep, Qin, mat_propert
         exitstatus = 5
         return exitstatus, None
 
-    fluidVel = data[0]
+    fluidVel = data[0][0]
     # setting arrival time for fully traversed tip elements (new channel elements)
     Tarrival_k = np.copy(Fr_lstTmStp.Tarrival)
     max_Tarrival = np.nanmax(Tarrival_k)
@@ -789,7 +789,8 @@ def injection_extended_footprint(w_k, Fr_lstTmStp, C, timeStep, Qin, mat_propert
     if sim_properties.saveRegime:
         Fr_kplus1.regime = regime
     Fr_kplus1.source = np.where(Qin != 0)[0]
-
+    Fr_kplus1.effVisc = data[0][2]
+    
     if fluid_properties.turbulence:
         if sim_properties.saveReynNumb or sim_properties.saveFluidFlux:
             ReNumb, check = turbulence_check_tip(fluidVel, Fr_kplus1, fluid_properties, return_ReyNumb=True)
@@ -1104,7 +1105,7 @@ def solve_width_pressure(Fr_lstTmStp, sim_properties, fluid_properties, mat_prop
                         sys_fun = MakeEquationSystem_ViscousFluid_pressure_substituted_sparse
                     else:
                         sys_fun = MakeEquationSystem_ViscousFluid_pressure_substituted
-                guess = np.ones((len(EltCrack), ), float)
+                guess = 1e5 * np.ones((len(EltCrack), ), float)
                 guess[np.arange(len(to_solve_k))] = timeStep * sum(Qin) / Fr_lstTmStp.EltCrack.size \
                                                     * np.ones((len(to_solve_k),), float)
             else:
@@ -1584,7 +1585,7 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
         exitstatus = 5
         return exitstatus, None
 
-    fluidVel = data[0]
+    fluidVel = data[0][0]
     # setting arrival time for fully traversed tip elements (new channel elements)
     Tarrival_k = np.copy(Fr_lstTmStp.Tarrival)
     max_Tarrival = np.nanmax(Tarrival_k)
@@ -1620,7 +1621,8 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
     Fr_kplus1.FractureVolume = np.sum(Fr_kplus1.w) * Fr_kplus1.mesh.EltArea
     Fr_kplus1.Tarrival = Tarrival_k
     Fr_kplus1.wHist = np.maximum(Fr_kplus1.w, Fr_lstTmStp.wHist)
-
+    Fr_kplus1.effVisc = data[0][2]
+    
     if sim_properties.verbosity > 1:
         print("Solved...\nFinding velocity of front...")
 

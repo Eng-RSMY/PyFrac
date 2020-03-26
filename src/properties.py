@@ -690,7 +690,7 @@ class SimulationProperties:
                                                  and leak off (see Donstov and Pierce, 2017))
                                             - MK (viscosity to toughness transition regime)
         """
-        tipAssymptOptions = ("K", "M", "Mt", "U", "MK", "MDR", "M_MDR", "HBF")
+        tipAssymptOptions = ["K", "M", "Mt", "U", "MK", "MDR", "M_MDR", "HBF", "M_HBF"]
         if tip_asymptote in tipAssymptOptions:  # check if tip asymptote matches any option
             self.__tipAsymptote = tip_asymptote
         else: # error

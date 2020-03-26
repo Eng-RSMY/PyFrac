@@ -587,7 +587,8 @@ class Controller:
                         self.Figures[index] = Fr_advanced.plot_fracture(variable=plt_var,
                                                                        projection='2D_clrmap',
                                                                        mat_properties=self.solid_prop,
-                                                                       fig=self.Figures[index])
+                                                                       fig=self.Figures[index],
+                                                                       edge=0)
                         # plotting source elements
                         plot_injection_source(self.fracture,
                                               fig=self.Figures[index])
@@ -600,6 +601,8 @@ class Controller:
                                                                                 plot_prop=plot_prop,
                                                                                 plot_mesh=False,
                                                                                 print_number=False)
+                    plt.ion()
+                    plt.pause(0.01)
                 # set figure position
                 if self.setFigPos:
                     for i in range(len(self.sim_prop.plotVar)):
@@ -616,9 +619,9 @@ class Controller:
                             pass
                     self.setFigPos = False
 
-                # plot the figure
-                plt.ion()
-                plt.pause(0.01)
+                # # plot the figure
+                # plt.ion()
+                # plt.pause(0.01)
                 print("Done! ")
                 if self.sim_prop.blockFigure:
                     input("Press any key to continue.")
