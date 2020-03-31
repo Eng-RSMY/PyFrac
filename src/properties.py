@@ -697,6 +697,20 @@ class SimulationProperties:
                                             - U  (Universal regime accommodating viscosity, toughness\
                                                  and leak off (see Donstov and Pierce, 2017))
                                             - MK (viscosity to toughness transition regime)
+                                            - MDR (Maximum drag reduction asymptote, see Lecampion & Zia 2019)
+                                            - M_MDR (Maximum drag reduction asymptote in viscosity sotrage \ 
+                                                  regime, see Lecampion & Zia 2019)
+                                            - HBF or HBF_aprox (Herschel-Bulkley fluid, see Bessmertnykh and \
+                                                  Dontsov 2019; the tip volume is evaluated with a fast aproximation)
+                                            - HBF_num_quad (Herschel-Bulkley fluid, see Bessmertnykh and \
+                                                  Dontsov 2019; the tip volume is evaluated with numerical quadrature of the\ 
+                                                  approximate function, which makes it very slow)
+                                            - PLF or PLF_aprox (power law fluid, see Dontsov and \
+                                                  Kresse 2017; the tip volume is evaluated with a fast aproximation)
+                                            - PLF_num_quad (power law fluid, see Dontsov and \
+                                                  Kresse 2017; the tip volume is evaluated with numerical quadrature of the\ 
+                                                  approximate function, which makes it very slow)
+                                            = PLF_M (power law fluid in viscosity storage regime; see Desroche et al.)    
         """
         tipAssymptOptions = ["K", "M", "Mt", "U", "MK", "MDR", "M_MDR", "HBF", "HBF_aprox", 
                              "HBF_num_quad", "PLF", "PLF_aprox", "PLF_num_quad", "PLF_M"]
