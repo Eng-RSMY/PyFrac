@@ -231,7 +231,8 @@ class FluidProperties:
         muPrime (float):         -- 12 * viscosity (parallel plates viscosity factor).
         rheology (string):       -- string specifying rheology of the fluid. Possible options:
                                      - "Newtonian"
-                                     - "non-Newtonian"
+                                     - "Herschel-Bulkley" or "HBF"
+                                     - "power-law" or "PLF"
         density (float):         -- density of the fluid.
         turbulence (bool):       -- turbulence flag. If true, turbulence will be taken into account.
         compressibility (float): -- the compressibility of the fluid.
@@ -255,17 +256,24 @@ class FluidProperties:
             self.viscosity = viscosity
             self.muPrime = 12. * self.viscosity  # the geometric viscosity in the parallel plate solution
 
-        rheologyOptions = ["Newtonian", "Herschel-Bulkley", "HB", "non-Newtonian"]
+        rheologyOptions = ["Newtonian", "Herschel-Bulkley", "HBF", "power-law", "PLF"]
         if rheology in rheologyOptions:  # check if rheology match to any rheology option
             self.rheology = rheology
-            if rheology in ["Herschel-Bulkley", "HB"]:
+            if rheology in ["Herschel-Bulkley", "HBF"]:
+                if n is None or k is None or T0 is None:
+                    raise ValueError("n (flow index), k(consistency index) and T0 (yield stress) are required for a \
+                                     Herscel-Bulkley type fluid!")
                 self.n = n
                 self.k = k
                 self.T0 = T0
-            elif rheology is "non-Newtonian":
-                raise ValueError("Non-Newtonian rheology not yet supported")
+            elif rheology in ["power-law", "PLF"]:
+                if n is None or k is None:
+                    raise ValueError("n (flow index) and k(consistency index) are required for a power-law type fluid!")
+                self.n = n
+                self.k = k
+                
         else:# error
-            raise ValueError('Invalid input for rheology. Possible options: ' + repr(rheologyOptions))
+            raise ValueError('Invalid input for fluid rheology. Possible options: ' + repr(rheologyOptions))
 
         self.density = density
 
@@ -690,7 +698,8 @@ class SimulationProperties:
                                                  and leak off (see Donstov and Pierce, 2017))
                                             - MK (viscosity to toughness transition regime)
         """
-        tipAssymptOptions = ["K", "M", "Mt", "U", "MK", "MDR", "M_MDR", "HBF", "M_HBF"]
+        tipAssymptOptions = ["K", "M", "Mt", "U", "MK", "MDR", "M_MDR", "HBF", "HBF_aprox", 
+                             "HBF_num_quad", "PLF", "PLF_aprox", "PLF_num_quad", "PLF_M"]
         if tip_asymptote in tipAssymptOptions:  # check if tip asymptote matches any option
             self.__tipAsymptote = tip_asymptote
         else: # error

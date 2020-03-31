@@ -14,6 +14,7 @@ import os
 import numpy as np
 import time
 from time import gmtime, strftime
+import warnings
 
 # local imports
 from properties import LabelProperties, IterationProperties, PlotProperties
@@ -125,6 +126,9 @@ class Controller:
                Sim_prop.solveSparse = False
            else:
                Sim_prop.solveSparse = True
+        if Sim_prop.solveSparse and self.fluid_prop.rheology in ["Herschel-Bulkley", "HBF"]:
+            warnings.warn("Herschel-Bulkley fluid is not implemented with sparse matrix. Using dense...")
+            Sim_prop.solveSparse = False
 
         # basic performance data
         self.remeshings = 0
@@ -140,8 +144,22 @@ class Controller:
         else:
             self.logAddress = './'
 
-
-
+        # setting up tip asymptote
+        if self.fluid_prop.rheology in ["Herschel-Bulkley", "HBF"]:
+            if self.sim_prop.get_tipAsymptote() not in ["HBF", "HBF_aprox", "HBF_num_quad"]:
+                warnings.warn("Fluid rhelogy and tip asymptote does not match. Setting tip asymptote to \'HBF\'")
+                self.sim_prop.set_tipAsymptote('HBF')
+        if self.fluid_prop.rheology in ["power-law", "PLF"]:
+            if self.sim_prop.get_tipAsymptote() not in ["PLF", "PLF_aprox", "PLF_num_quad", "PLF_M"]:
+                warnings.warn("Fluid rhelogy and tip asymptote does not match. Setting tip asymptote to \'PLF\'")
+                self.sim_prop.set_tipAsymptote('PLF')
+        if self.fluid_prop.rheology == 'Newtonian':
+            if self.sim_prop.get_tipAsymptote() not in ["K", "M", "Mt", "U", "MK", "MDR", "M_MDR"]:
+                warnings.warn("Fluid rhelogy and tip asymptote does not match. Setting tip asymptote to \'U\'")
+                self.sim_prop.set_tipAsymptote('U')
+        
+        # temperory for non-Newtonian fluids
+        self.sim_prop.solveSparse = False
 #-----------------------------------------------------------------------------------------------------------------------
 
     def run(self):

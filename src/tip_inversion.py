@@ -160,9 +160,8 @@ def TipAsym_Hershcel_Burkley_Res(dist, *args):
     ell = (Kprime**(n + 2) / Mprime / Vel**n / Eprime**(n + 1))**(2 / (2 - n))
     xt = np.sqrt(dist / ell)
     T0t = T0 * 2 * Eprime * ell / Kprime / Kprime
-    # wtTau = 2 * np.sqrt(np.pi * T0t) * xt
-    wtTau2 = np.sqrt(8 * np.pi * T0 / Eprime) * dist
-    wt = ((wEltRibbon * Eprime / Kprime / np.sqrt(dist))**alpha - wtTau2**alpha)**(1 / alpha)
+    wtTau = 2 * np.sqrt(np.pi * T0t) * xt
+    wt = ((wEltRibbon * Eprime / Kprime / np.sqrt(dist))**alpha - wtTau**alpha)**(1 / alpha)
 
     theta = 0.0452 * n**2 - 0.178 * n + 0.1753
     Vm = 1 - wt ** -((2 + n) / (1 + theta))
@@ -183,7 +182,38 @@ def TipAsym_Hershcel_Burkley_Res(dist, *args):
 
 # ----------------------------------------------------------------------------------------------------------------------
 
-def TipAsym_Hershcel_Burkley_M_vertex_Res(dist, *args):
+def TipAsym_power_law_Res(dist, *args):
+    """Function to be minimized to find root for Herschel Bulkley (see Bessmertnykh and Donstov 2019)"""
+
+    (wEltRibbon, Kprime, Eprime, muPrime, Cbar, Dist_LstTS, dt, n, k, T0) = args
+
+    Vel = (dist - Dist_LstTS) / dt
+    X = 2 * Cbar * Eprime / np.sqrt(Vel) / Kprime
+    Mprime = 2**(n + 1) * (2 * n + 1)**n / n**n * k
+    ell = (Kprime**(n + 2) / Mprime / Vel**n / Eprime**(n + 1))**(2 / (2 - n))
+    xt = np.sqrt(dist / ell)
+    wt = wEltRibbon * Eprime / Kprime / np.sqrt(dist)
+
+    theta = 0.0452 * n**2 - 0.178 * n + 0.1753
+    Vm = 1 - wt ** -((2 + n) / (1 + theta))
+    Vmt = 1 - wt ** -((2 + 2 * n) / (1 + theta))
+    dm = (2 - n) / (2 + n)
+    dmt = (2 - n) / (2 + 2 * n)
+    Bm = (2 * (2 + n)**2 / n * np.tan(np.pi * n / (2 + n)))**(1 / (2 + n))
+    Bmt = (64 * (1 + n) ** 2 / (3 * n *(4 + n)) * np.tan(3 * np.pi * n / (4 * (1 + n))))**(1 / (2 + 2 * n))
+
+    dt1 = dmt * dm * Vmt * Vm * \
+          (Bm**((2 + n) / n) * Vmt**((1 + theta) / n) + X / wt * Bmt**(2 * (1 + n) / n) * Vm**((1 + theta) / n)) / \
+          (dmt * Vmt * Bm**((2 + n) / n) * Vmt**((1 + theta) / n) +
+           dm * Vm * X / wt * Bmt**(2 * (1 + n) / n) * Vm**((1 + theta) / n))
+
+    return xt**((2 - n) / (1 + theta)) - dt1 * wt**((2 + n) / (1 + theta)) * (dm**(1 + theta) * Bm**(2 + n) +
+                            dmt**(1 + theta) * Bmt**(2 * (1 + n)) * ((1 + X / wt)**n - 1))**(-1 / (1 + theta))
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def TipAsym_PowerLaw_M_vertex_Res(dist, *args):
     
     (wEltRibbon, Kprime, Eprime, muPrime, Cbar, Dist_LstTS, dt, n, k, T0) = args
     
@@ -240,10 +270,19 @@ def FindBracket_dist(w, Kprime, Eprime, muPrime, Cprime, DistLstTS, dt, mesh, Re
     a = -DistLstTS * (1 + 5e3 * np.finfo(float).eps)
     a[np.where(a <= np.finfo(float).eps * np.finfo(float).eps)[0]] = np.finfo(float).eps
     b = np.full((len(w),), 4 * (mesh.hx**2 + mesh.hy**2)**0.5, dtype=np.float64)
-
+    non_Newtonian = False
+    if fluidProp.rheology in ["power-law", "PLF"]:
+        T0 = 0.
+        non_Newtonian = True
+    elif fluidProp.rheology in ["Herschel-Bulkley", "HBF"]:
+        T0 = fluidProp.T0
+        non_Newtonian = True
+        
     for i in range(0, len(w)):
-        TipAsmptargs = (w[i], Kprime[i], Eprime[i], muPrime[i], Cprime[i], -DistLstTS[i], dt, fluidProp.n, fluidProp.k, fluidProp.T0)
-        # TipAsmptargs = (w[i], Kprime[i], Eprime[i], muPrime[i], Cprime[i], -DistLstTS[i], dt)
+        if non_Newtonian:
+            TipAsmptargs = (w[i], Kprime[i], Eprime[i], muPrime[i], Cprime[i], -DistLstTS[i], dt, fluidProp.n, fluidProp.k, T0)
+        else:
+            TipAsmptargs = (w[i], Kprime[i], Eprime[i], muPrime[i], Cprime[i], -DistLstTS[i], dt)
         Res_a = ResFunc(a[i], *TipAsmptargs)
         Res_b = ResFunc(b[i], *TipAsmptargs)
 
@@ -292,6 +331,7 @@ def TipAsymInversion(w, frac, matProp, simParmtrs, fluidProp=None, dt=None, Kpri
     else:
         Eprime = Eprime_k
 
+    non_Newtonian = False
     if simParmtrs.get_tipAsymptote() == 'U':
         ResFunc = TipAsym_Universal_zrthOrder_Res
     elif simParmtrs.get_tipAsymptote() == 'K':
@@ -308,10 +348,18 @@ def TipAsymInversion(w, frac, matProp, simParmtrs, fluidProp=None, dt=None, Kpri
         ResFunc = TipAsym_MDR_Res
     elif simParmtrs.get_tipAsymptote() == 'M_MDR':
         ResFunc = TipAsym_M_MDR_Res
-    elif simParmtrs.get_tipAsymptote() == 'HBF':
+    elif simParmtrs.get_tipAsymptote() in ["HBF", "HBF_aprox", "HBF_num_quad"]:
         ResFunc = TipAsym_Hershcel_Burkley_Res
-    elif simParmtrs.get_tipAsymptote() == 'M_HBF':
-        ResFunc = TipAsym_Hershcel_Burkley_M_vertex_Res
+        non_Newtonian = True
+        T0 = fluidProp.T0
+    elif simParmtrs.get_tipAsymptote() in ["PLF", "PLF_aprox", "PLF_num_quad"]:
+        ResFunc = TipAsym_power_law_Res
+        non_Newtonian = True
+        T0 = 0.
+    elif simParmtrs.get_tipAsymptote() == 'PLF_M':
+        ResFunc = TipAsym_PowerLaw_M_vertex_Res
+        non_Newtonian = True
+        T0 = 0.
     else:
         raise SystemExit("Tip asymptote type not supported!")
 
@@ -333,7 +381,7 @@ def TipAsymInversion(w, frac, matProp, simParmtrs, fluidProp=None, dt=None, Kpri
 
     dist = -frac.sgndDist[frac.EltRibbon]
     for i in range(0, len(moving)):
-        if 'HBF' in simParmtrs.get_tipAsymptote():
+        if non_Newtonian:
             TipAsmptargs = (w[frac.EltRibbon[moving[i]]],
                         Kprime[moving[i]],
                         Eprime[moving[i]],
@@ -343,7 +391,7 @@ def TipAsymInversion(w, frac, matProp, simParmtrs, fluidProp=None, dt=None, Kpri
                         dt,
                         fluidProp.n,
                         fluidProp.k,
-                        fluidProp.T0)
+                        T0)
         else:
             TipAsmptargs = (w[frac.EltRibbon[moving[i]]],
                             Kprime[moving[i]],

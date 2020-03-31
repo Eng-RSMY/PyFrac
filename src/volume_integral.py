@@ -13,6 +13,8 @@ from scipy.optimize import brentq
 from tip_inversion import f
 from scipy.integrate import quad
 
+
+
 def moment_1_func(s, *HB_args):
 
     HB_args_ext = (HB_args, HB_args[0] - s)
@@ -22,8 +24,7 @@ def moment_1_func(s, *HB_args):
     if np.isnan(a):
         return np.nan
     w = brentq(TipAsym_res_Herschel_Bulkley_d_given, a, b, HB_args_ext)
-    # (l, Kprime, Eprime, muPrime, Cbar, Vel, n, k, T0) = HB_args
-    # w = (18 * 3 ** 0.5 * Vel * muPrime / Eprime) ** (1 / 3) * (l - s) ** (2 / 3)
+    
     return w * s
 
 def moment_0_func(s, *HB_args):
@@ -35,8 +36,7 @@ def moment_0_func(s, *HB_args):
     if np.isnan(a):
         return np.nan
     w = brentq(TipAsym_res_Herschel_Bulkley_d_given, a, b, HB_args_ext)
-    # (l, Kprime, Eprime, muPrime, Cbar, Vel, n, k, T0) = HB_args
-    # w = (18 * 3 ** 0.5 * Vel * muPrime / Eprime) ** (1 / 3) * s ** (2 / 3)
+    
     return w
 
 #-----------------------------------------------------------------------------------------------------------------------
@@ -52,9 +52,7 @@ def TipAsym_res_Herschel_Bulkley_d_given(w, *args):
     xt = np.sqrt(dist / ell)
     T0t = T0 * 2 * Eprime * ell / Kprime ** 2
     wtTau = np.sqrt(4 * np.pi * T0t) * xt
-    wtTau2 = np.sqrt(8 * np.pi * T0 / Eprime) * dist
-    wt = ((w * Eprime / Kprime / np.sqrt(dist)) ** alpha - wtTau2 ** alpha) ** (
-                1 / alpha)
+    wt = ((w * Eprime / Kprime / np.sqrt(dist)) ** alpha - wtTau ** alpha) ** (1 / alpha)
 
     theta = 0.0452 * n ** 2 - 0.178 * n + 0.1753
     Vm = 1 - wt ** -((2 + n) / (1 + theta))
@@ -66,7 +64,7 @@ def TipAsym_res_Herschel_Bulkley_d_given(w, *args):
 
     dt1 = dmt * dm * Vmt * Vm * \
           (Bm ** ((2 + n) / n) * Vmt ** ((1 + theta) / n) + X / wt * Bmt ** (2 * (1 + n) / n) * Vm ** (
-                      (1 + theta) / n)) / \
+          (1 + theta) / n)) / \
           (dmt * Vmt * Bm ** ((2 + n) / n) * Vmt ** ((1 + theta) / n) +
            dm * Vm * X / wt * Bmt ** (2 * (1 + n) / n) * Vm ** ((1 + theta) / n))
 
@@ -109,6 +107,8 @@ def TipAsym_UniversalW_zero_Res(w, *args):
     return sh - g0
 
 
+#-----------------------------------------------------------------------------------------------------------------------
+
 def TipAsym_UniversalW_delt_Res(w, *args):
     """The residual function zero of which will give the General asymptote """
 
@@ -127,6 +127,8 @@ def TipAsym_UniversalW_delt_Res(w, *args):
 
     return sh - f(Kh, Ch * b, C1)
 
+
+#-----------------------------------------------------------------------------------------------------------------------
 
 def MomentsTipAssympGeneral(dist, Kprime, Eprime, muPrime, Cbar, Vel, stagnant, KIPrime):
     """Moments of the General tip asymptote to calculate the volume integral (see Donstov and Pierce, 2017)"""
@@ -166,11 +168,15 @@ def MomentsTipAssympGeneral(dist, Kprime, Eprime, muPrime, Cbar, Vel, stagnant, 
     return M0, M1
 
 
+#-----------------------------------------------------------------------------------------------------------------------
+
 def Pdistance(x, y, slope, intercpt):
     """distance of a point from a line"""
 
     return (slope * x - y + intercpt) / (slope ** 2 + 1) ** 0.5
 
+
+#-----------------------------------------------------------------------------------------------------------------------
 
 def VolumeTriangle(dist, *param):
     """
@@ -230,23 +236,35 @@ def VolumeTriangle(dist, *param):
         return (0.0885248 * dist ** 2.74074 * em * Vel ** 0.481481 * muPrime ** 0.259259 * density ** 0.111111
          ) / Eprime ** 0.37037
 
-    elif regime == 'HBF':
-    # elif 'HBF' in regime:
+    elif regime in ['HBF', 'HBF_aprox']:
         args_HB = (dist, Kprime, Eprime, muPrime, Cbar, Vel, fluid_prop.n, fluid_prop.k, fluid_prop.T0)
-        # vo1 = em * quad(moment_1_func, 0, dist, args_HB)[0]
-
         (M0, M1) = MomentsTipAssymp_HBF(dist, *args_HB)
-        vo2 = em * (dist * M0 - M1)
+        return em * (dist * M0 - M1)
 
-        # print('ratio = ' + repr(vo1/vo2 - 1))
-        return vo2
-    elif regime == 'M_HBF':
+    elif regime == 'HBF_num_quad':
+        args_HB = (dist, Kprime, Eprime, muPrime, Cbar, Vel, fluid_prop.n, fluid_prop.k, fluid_prop.T0)
+        return em * quad(moment_1_func, 0, dist, args_HB)[0]
+    
+    elif regime in ['PLF', 'PLF_aprox']:
+        args_PLF = (dist, Kprime, Eprime, muPrime, Cbar, Vel, fluid_prop.n, fluid_prop.k, 0.)
+        (M0, M1) = MomentsTipAssymp_HBF(dist, *args_PLF)
+        return em * (dist * M0 - M1)
+
+    elif regime == 'PLF_num_quad':
+        args_PLF = (dist, Kprime, Eprime, muPrime, Cbar, Vel, fluid_prop.n, fluid_prop.k, 0.)
+        return em * quad(moment_1_func, 0, dist, args_PLF)[0]
+
+    elif regime == 'PLF_M':
         n = fluid_prop.n
         k = fluid_prop.k
         Mprime = 2**(n + 1) * (2 * n + 1)**n / n**n * k
         Bm = (2 * (2 + n)**2 / n * np.tan(np.pi * n / (2 + n)))**(1 / (2 + n))
         
-        return Bm * (Mprime * Vel**n / Eprime) ** (1 / (2 + n)) * dist ** ((4 + n) / (2 + n)) * dist * (2 + n) * (1 / (4 + n) - 1 / (6 + 2 *n))
+        return Bm * (Mprime * Vel**n / Eprime) ** (1 / (2 + n)) * dist ** ((4 + n) / (2 + n)) * \
+                dist * (2 + n) * (1 / (4 + n) - 1 / (6 + 2 *n))
+
+
+#-----------------------------------------------------------------------------------------------------------------------
 
 def Area(dist, *param):
     """Gives Area under the tip depending on the regime identifier ;  
@@ -301,15 +319,25 @@ def Area(dist, *param):
         return (0.242623 * dist ** 1.74074 * Vel ** 0.481481 * muPrime ** 0.259259 * density ** 0.111111
          ) / Eprime ** 0.37037
 
-    # elif regime == 'HBF':
-    elif 'HBF' in regime:
-        
+    elif regime in ['HBF', 'HBF_aprox']:
         args_HB = (dist, Kprime, Eprime, muPrime, Cbar, Vel, fluid_prop.n, fluid_prop.k, fluid_prop.T0)
-        # return quad(moment_0_func, 0, dist, args_HB)[0]
-
         (M0, M1) = MomentsTipAssymp_HBF(dist, *args_HB)
         return M0
-    elif regime == 'M_HBF':
+    
+    elif regime == 'HBF_num_quad':
+        args_HB = (dist, Kprime, Eprime, muPrime, Cbar, Vel, fluid_prop.n, fluid_prop.k, fluid_prop.T0)
+        return quad(moment_0_func, 0, dist, args_HB)[0]
+    
+    elif regime in ['PLF', 'PLF_aprox']:
+        args_PLF = (dist, Kprime, Eprime, muPrime, Cbar, Vel, fluid_prop.n, fluid_prop.k, 0.)
+        (M0, M1) = MomentsTipAssymp_HBF(dist, *args_PLF)
+        return M0
+    
+    elif regime == 'PLF_num_quad':
+        args_PLF = (dist, Kprime, Eprime, muPrime, Cbar, Vel, fluid_prop.n, fluid_prop.k, 0.)
+        return quad(moment_0_func, 0, dist, args_PLF)[0]
+        
+    elif regime == 'PLF_M':
         n = fluid_prop.n
         k = fluid_prop.k
         Mprime = 2**(n + 1) * (2 * n + 1)**n / n**n * k
@@ -459,6 +487,8 @@ def Integral_over_cell(EltTip, alpha, l, mesh, function, frac=None, mat_prop=Non
     return integral
 
 
+#------------------------------------------------------------------------------------------------------------------------
+
 def FindBracket_w(dist, Kprime, Eprime, muPrime, Cprime, Vel):
     """
     This function finds the bracket to be used by the Universal tip asymptote root finder.
@@ -494,17 +524,14 @@ def FindBracket_w_HB(a, b, *args):
     xt = np.sqrt(dist / ell)
     T0t = T0 * 2 * Eprime * ell / Kprime / Kprime
     alpha = -0.3107 * n + 1.9924
-    # a = max(1.01 * Kprime * np.sqrt(dist) / Eprime * np.sqrt(4 * np.pi * T0t * xt),
-    #         1.01 * Kprime * np.sqrt(dist) / Eprime)
-    a = Kprime * np.sqrt(dist) / Eprime * (1 + (np.sqrt(4 * np.pi * T0t) * xt) ** alpha) ** (1 / alpha) + 10*np.finfo(float).eps
+    a = Kprime * np.sqrt(dist) / Eprime * (1 + (np.sqrt(4 * np.pi * T0t) * xt) ** alpha) ** (
+        1 / alpha) + 10*np.finfo(float).eps
     b = 1
     cnt = 1
     Res_a = TipAsym_res_Herschel_Bulkley_d_given(a, *args)
     Res_b = TipAsym_res_Herschel_Bulkley_d_given(b, *args)
     while Res_a * Res_b > 0:
-        # a = 10**-cnt * a
         b = 10**cnt * b
-        # Res_a = TipAsym_res_Herschel_Bulkley_d_given(a, *args)
         Res_b = TipAsym_res_Herschel_Bulkley_d_given(b, *args)
         cnt += 1
         if cnt >= 12:
@@ -518,6 +545,8 @@ def FindBracket_w_HB(a, b, *args):
         b = np.nan
     return a, b
 
+
+#-------------------------------------------------------------------------------------------------------------------------
 
 def find_corresponding_ribbon_cell(tip_cells, alpha, zero_vertex, mesh):
 
