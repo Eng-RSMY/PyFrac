@@ -427,6 +427,16 @@ def TipAsymInversion(w, frac, matProp, simParmtrs, dt=None, Kprime_k=None, Eprim
     #                         frac.mesh,
     #                         ResFunc)
 
+    # a, b = FindBracket_dist(w[frac.EltRibbon[moving]],
+    #                         Kprime[moving],
+    #                         Eprime[moving],
+    #                         frac.muPrime[frac.EltRibbon[moving]],
+    #                         matProp.Cprime[frac.EltRibbon[moving]],
+    #                         frac.sgndDist[frac.EltRibbon[moving]],
+    #                         dt,
+    #                         frac.mesh,
+    #                         ResFunc)
+
     dist = -frac.sgndDist[frac.EltRibbon]
     for i in range(0, len(moving)):
         # TipAsmptargs = (w[frac.EltRibbon[moving[i]]],
