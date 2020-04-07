@@ -1282,7 +1282,7 @@ def MakeEquationSystem_ViscousFluid_pressure_substituted_deltaP(solk, interItr, 
                                                    InCrack,
                                                    neiInCrack)
     elif fluid_prop.rheology in ['power law', 'PLF']:
-        FinDiffOprtr, eff_mu = finiteDiff_operator_power_law(wcNplusOne,
+        FinDiffOprtr, eff_mu = finiteDiff_operator_power_law(wcNplusOne,         
                                                    EltCrack,
                                                    C,
                                                    sigma0,
@@ -1693,13 +1693,33 @@ def pressure_gradient(w, C, sigma0, Mesh, EltCrack, InCrack):
     pf = np.zeros((Mesh.NumberOfElts, ), dtype=np.float64)
     pf[EltCrack] = np.dot(C[np.ix_(EltCrack, EltCrack)], w[EltCrack]) + sigma0[EltCrack]
 
-    dpdxLft = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 0]]) * InCrack[Mesh.NeiElements[EltCrack, 0]]
-    dpdxRgt = (pf[Mesh.NeiElements[EltCrack, 1]] - pf[EltCrack]) * InCrack[Mesh.NeiElements[EltCrack, 1]]
-    dpdyBtm = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 2]]) * InCrack[Mesh.NeiElements[EltCrack, 2]]
-    dpdyTop = (pf[Mesh.NeiElements[EltCrack, 3]] - pf[EltCrack]) * InCrack[Mesh.NeiElements[EltCrack, 3]]
+    dpdxLft = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 0]]) / Mesh.hx * InCrack[Mesh.NeiElements[EltCrack, 0]]
+    dpdxRgt = (pf[Mesh.NeiElements[EltCrack, 1]] - pf[EltCrack]) / Mesh.hx * InCrack[Mesh.NeiElements[EltCrack, 1]]
+    dpdyBtm = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 2]]) / Mesh.hy * InCrack[Mesh.NeiElements[EltCrack, 2]]
+    dpdyTop = (pf[Mesh.NeiElements[EltCrack, 3]] - pf[EltCrack]) / Mesh.hy * InCrack[Mesh.NeiElements[EltCrack, 3]]
 
     return dpdxLft, dpdxRgt, dpdyBtm, dpdyTop
 
+
+#-----------------------------------------------------------------------------------------------------------------------
+
+
+def pressure_gradient_2(w, solk, C, sigma0, Mesh, EltCrack, EltChannel, EltTip, EltClosed, InCrack):
+    """
+    This function gives the pressure gradient at the cell edges evaluated with the pressure calculated from the
+    elasticity relation for the given fracture width.
+    """
+    pf = np.zeros((Mesh.NumberOfElts, ), dtype=np.float64)
+    pf[EltChannel] = np.dot(C[np.ix_(EltChannel, EltCrack)], w[EltCrack]) + sigma0[EltChannel]
+    pf[EltClosed] = pf_last[EltClosed] + solk[len(EltChannel):len(EltChannel) + len(EltClosed)]
+    pf[EltChannel] = pf_last[EltTip] + solk[len(EltChannel) + len(EltClosed):]
+
+    dpdxLft = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 0]]) / Mesh.hx * InCrack[Mesh.NeiElements[EltCrack, 0]]
+    dpdxRgt = (pf[Mesh.NeiElements[EltCrack, 1]] - pf[EltCrack]) / Mesh.hx * InCrack[Mesh.NeiElements[EltCrack, 1]]
+    dpdyBtm = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 2]]) / Mesh.hy * InCrack[Mesh.NeiElements[EltCrack, 2]]
+    dpdyTop = (pf[Mesh.NeiElements[EltCrack, 3]] - pf[EltCrack]) / Mesh.hx * InCrack[Mesh.NeiElements[EltCrack, 3]]
+
+    return dpdxLft, dpdxRgt, dpdyBtm, dpdyTop
 
 #-----------------------------------------------------------------------------------------------------------------------
 
