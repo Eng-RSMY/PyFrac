@@ -1065,7 +1065,13 @@ def solve_width_pressure(Fr_lstTmStp, sim_properties, fluid_properties, mat_prop
                 corresponding = np.where(EltCrack_k == Fr_lstTmStp.mesh.NeiElements[elem, 3])[0]
                 if len(corresponding) > 0:
                     corr_nei[i, 3] = corresponding
-
+            
+            
+            in_tip = [np.where(InCrack[Fr_lstTmStp.mesh.NeiElements[EltCrack_k, 0]]),
+                      np.where(InCrack[Fr_lstTmStp.mesh.NeiElements[EltCrack_k, 1]]),
+                      np.where(InCrack[Fr_lstTmStp.mesh.NeiElements[EltCrack_k, 2]]),
+                      np.where(InCrack[Fr_lstTmStp.mesh.NeiElements[EltCrack_k, 3]])]
+            
             arg = (
                 # See the documentation of the functions making the linear system for description of the arguments
                 # passed to the Piccard solver.
@@ -1092,7 +1098,8 @@ def solve_width_pressure(Fr_lstTmStp, sim_properties, fluid_properties, mat_prop
                 mat_properties.wc,
                 fluid_properties.compressibility,
                 corr_nei,
-                fluid_properties)
+                fluid_properties,
+                in_tip)
 
             if sim_properties.substitutePressure:
                 if sim_properties.solveDeltaP:

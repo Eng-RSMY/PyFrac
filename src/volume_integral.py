@@ -82,7 +82,7 @@ def MomentsTipAssymp_HBF(s, *HB_args):
     b = 1e1
     a, b = FindBracket_w_HB(a, b, *HB_args_ext)
     if np.isnan(a):
-        return np.nan
+        return np.nan, np.nan
     w = brentq(TipAsym_res_Herschel_Bulkley_d_given, a, b, HB_args_ext)
 
     M0 = 2 * w * s / (3 + 1 / 6)
