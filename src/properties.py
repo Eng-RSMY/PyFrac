@@ -233,6 +233,7 @@ class FluidProperties:
                                      - "Newtonian"
                                      - "Herschel-Bulkley" or "HBF"
                                      - "power-law" or "PLF"
+        Mprime                   -- 2**(n + 1) * (2 * n + 1)**n / n**n  * k
         density (float):         -- density of the fluid.
         turbulence (bool):       -- turbulence flag. If true, turbulence will be taken into account.
         compressibility (float): -- the compressibility of the fluid.
@@ -266,12 +267,18 @@ class FluidProperties:
                 self.n = n
                 self.k = k
                 self.T0 = T0
+                self.Mprime = 2**(n + 1) * (2 * n + 1)**n / n**n  * k
+                self.var1 = self.Mprime ** (-1 / n)
+                self.var2 = 1/n - 1.
+                self.var3 = 2. + 1/n
+                self.var4 = 1. + 1/n
+                self.var5 = n / (n + 1.)   
             elif rheology in ["power-law", "PLF"]:
                 if n is None or k is None:
                     raise ValueError("n (flow index) and k(consistency index) are required for a power-law type fluid!")
                 self.n = n
                 self.k = k
-                
+                self.Mprime = 2**(n + 1) * (2 * n + 1)**n / n**n  * k
         else:# error
             raise ValueError('Invalid input for fluid rheology. Possible options: ' + repr(rheologyOptions))
 
