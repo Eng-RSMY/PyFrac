@@ -64,8 +64,7 @@ def finiteDiff_operator_laminar(w, EltCrack, muPrime, Mesh, InCrack, neiInCrack,
 
 #-----------------------------------------------------------------------------------------------------------------------
 
-def finiteDiff_operator_power_law(w, EltCrack, C, sigma0, n, tau_o, k, Mesh, InCrack, neiInCrack,
-                                         sparse_flag=False):
+def finiteDiff_operator_power_law(w, pf, EltCrack, fluidProp, Mesh, InCrack, neiInCrack, in_tip, sparse_flag=False):
     """
     The function evaluate the finite difference 5 point stencil matrix, i.e. the A matrix in the ElastoHydrodynamic
     equations in e.g. Dontsov and Peirce 2008. The matrix is evaluated for Herschel-Bulkley fluid rheology.
@@ -95,10 +94,10 @@ def finiteDiff_operator_power_law(w, EltCrack, C, sigma0, n, tau_o, k, Mesh, InC
     dy = Mesh.hy
 
     # width on edges; evaluated by averaging the widths of adjacent cells
-    wLftEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 0]]) / 2 * InCrack[Mesh.NeiElements[EltCrack, 0]]
-    wRgtEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 1]]) / 2 * InCrack[Mesh.NeiElements[EltCrack, 1]]
-    wBtmEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 2]]) / 2 * InCrack[Mesh.NeiElements[EltCrack, 2]]
-    wTopEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 3]]) / 2 * InCrack[Mesh.NeiElements[EltCrack, 3]]
+    wLftEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 0]]) / 2
+    wRgtEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 1]]) / 2
+    wBtmEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 2]]) / 2
+    wTopEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 3]]) / 2
     
 
     # pressure gradient data structure. The rows store pressure gradient in the following order.
@@ -108,11 +107,10 @@ def finiteDiff_operator_power_law(w, EltCrack, C, sigma0, n, tau_o, k, Mesh, InC
     # 6 - bottom edge in x-direction  # 7 - top edge in x-direction
 
     dp = np.zeros((8, Mesh.NumberOfElts), dtype=np.float64)
-    (dpdxLft, dpdxRgt, dpdyBtm, dpdyTop) = pressure_gradient(w, C, sigma0, Mesh, EltCrack, InCrack)
-    dp[0, EltCrack] = dpdxLft
-    dp[1, EltCrack] = dpdxRgt
-    dp[2, EltCrack] = dpdyBtm
-    dp[3, EltCrack] = dpdyTop
+    dp[0, EltCrack] = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 0]]) / dx
+    dp[1, EltCrack] = (pf[Mesh.NeiElements[EltCrack, 1]] - pf[EltCrack]) / dx
+    dp[2, EltCrack] = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 2]]) / dy
+    dp[3, EltCrack] = (pf[Mesh.NeiElements[EltCrack, 3]] - pf[EltCrack]) / dy
     # linear interpolation for pressure gradient on the edges where central difference not available
     dp[4, EltCrack] = (dp[2, Mesh.NeiElements[EltCrack, 0]] + dp[3, Mesh.NeiElements[EltCrack, 0]] + dp[2, EltCrack] +
                        dp[3, EltCrack]) / 4
@@ -124,27 +122,29 @@ def finiteDiff_operator_power_law(w, EltCrack, C, sigma0, n, tau_o, k, Mesh, InC
                        dp[1, EltCrack]) / 4
 
     # magnitude of pressure gradient vector on the cell edges. Used to calculate the friction factor
-    dpLft = (dp[0, EltCrack] ** 2 + dp[4, EltCrack] ** 2) ** 0.5
-    dpRgt = (dp[1, EltCrack] ** 2 + dp[5, EltCrack] ** 2) ** 0.5
-    dpBtm = (dp[2, EltCrack] ** 2 + dp[6, EltCrack] ** 2) ** 0.5
-    dpTop = (dp[3, EltCrack] ** 2 + dp[7, EltCrack] ** 2) ** 0.5
+    dpLft = np.sqrt(dp[0, EltCrack] ** 2 + dp[4, EltCrack] ** 2)
+    dpRgt = np.sqrt(dp[1, EltCrack] ** 2 + dp[5, EltCrack] ** 2)
+    dpBtm = np.sqrt(dp[2, EltCrack] ** 2 + dp[6, EltCrack] ** 2)
+    dpTop = np.sqrt(dp[3, EltCrack] ** 2 + dp[7, EltCrack] ** 2)
 
-    dpLft[dpLft == 0] = 1e-10
-    dpRgt[dpRgt == 0] = 1e-10
-    dpTop[dpTop == 0] = 1e-10
-    dpBtm[dpBtm == 0] = 1e-10
+    # dpLft[dpLft == 0] = 1e-10
+    # dpRgt[dpRgt == 0] = 1e-10
+    # dpTop[dpTop == 0] = 1e-10
+    # dpBtm[dpBtm == 0] = 1e-10
 
     cond = np.zeros((4, EltCrack.size), dtype=np.float64)
-    
-    Mprime = 2**(n + 1) * (2 * n + 1)**n / n**n * k
-    tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 0]])
-    cond[0, tip_edge] = (wLftEdge[tip_edge] ** (2 * n + 1) * dpLft[tip_edge] / Mprime) ** (1 / n) / dpLft[tip_edge]
-    tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 1]])
-    cond[1, tip_edge] = (wRgtEdge[tip_edge] ** (2 * n + 1) * dpRgt[tip_edge] / Mprime) ** (1 / n) / dpRgt[tip_edge]
-    tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 2]])
-    cond[2, tip_edge] = (wBtmEdge[tip_edge] ** (2 * n + 1) * dpBtm[tip_edge] / Mprime) ** (1 / n) / dpBtm[tip_edge]
-    tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 3]])
-    cond[3, tip_edge] = (wTopEdge[tip_edge] ** (2 * n + 1) * dpTop[tip_edge] / Mprime) ** (1 / n) / dpTop[tip_edge]
+    # tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 0]])
+    cond[0, in_tip[0]] = (wLftEdge[in_tip[0]] ** (2 * fluidProp.n + 1) * dpLft[in_tip[0]] / \
+                         fluidProp.Mprime) ** (1 / fluidProp.n) / dpLft[in_tip[0]]
+    # tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 1]])
+    cond[1, in_tip[1]] = (wRgtEdge[in_tip[1]] ** (2 * fluidProp.n + 1) * dpRgt[in_tip[1]] / \
+                         fluidProp.Mprime) ** (1 / fluidProp.n) / dpRgt[in_tip[1]]
+    # tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 2]])
+    cond[2, in_tip[2]] = (wBtmEdge[in_tip[2]] ** (2 * fluidProp.n + 1) * dpBtm[in_tip[2]] / \
+                         fluidProp.Mprime) ** (1 / fluidProp.n) / dpBtm[in_tip[2]]
+    # tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 3]])
+    cond[3, in_tip[3]] = (wTopEdge[in_tip[3]] ** (2 * fluidProp.n + 1) * dpTop[in_tip[3]] / \
+                         fluidProp.Mprime) ** (1 / fluidProp.n) / dpTop[in_tip[3]]
 
     indx_elts = np.arange(len(EltCrack))
     FinDiffOprtr[indx_elts, indx_elts] = -(cond[0, :] + cond[1, :]) / dx ** 2 - (cond[2, :] + cond[3, :]) / dy ** 2
@@ -153,19 +153,19 @@ def finiteDiff_operator_power_law(w, EltCrack, C, sigma0, n, tau_o, k, Mesh, InC
     FinDiffOprtr[indx_elts, neiInCrack[indx_elts, 2]] = cond[2, :] / dy ** 2
     FinDiffOprtr[indx_elts, neiInCrack[indx_elts, 3]] = cond[3, :] / dy ** 2
 
-    eff_mu = np.zeros((4, Mesh.NumberOfElts), dtype=np.float64)
-    eff_mu[0, EltCrack] =  wLftEdge ** 3 / (12 * cond[0, :])
-    eff_mu[1, EltCrack] =  wRgtEdge ** 3 / (12 * cond[1, :])
-    eff_mu[2, EltCrack] =  wBtmEdge ** 3 / (12 * cond[2, :])
-    eff_mu[3, EltCrack] =  wTopEdge ** 3 / (12 * cond[3, :])
+    # eff_mu = np.zeros((4, Mesh.NumberOfElts), dtype=np.float64)
+    # eff_mu[0, EltCrack] =  wLftEdge ** 3 / (12 * cond[0, :])
+    # eff_mu[1, EltCrack] =  wRgtEdge ** 3 / (12 * cond[1, :])
+    # eff_mu[2, EltCrack] =  wBtmEdge ** 3 / (12 * cond[2, :])
+    # eff_mu[3, EltCrack] =  wTopEdge ** 3 / (12 * cond[3, :])
+    eff_mu = None
     
     return FinDiffOprtr, eff_mu
 
 
 #-----------------------------------------------------------------------------------------------------------------------
 
-def finiteDiff_operator_Herschel_Bulkley(w, EltCrack, C, sigma0, n, tau_o, k, Mesh, InCrack, neiInCrack,
-                                         sparse_flag=False):
+def finiteDiff_operator_Herschel_Bulkley(w, pf, EltCrack, fluidProp, Mesh, InCrack, neiInCrack, in_tip, sparse_flag=False):
     """
     The function evaluate the finite difference 5 point stencil matrix, i.e. the A matrix in the ElastoHydrodynamic
     equations in e.g. Dontsov and Peirce 2008. The matrix is evaluated for Herschel-Bulkley fluid rheology.
@@ -195,10 +195,10 @@ def finiteDiff_operator_Herschel_Bulkley(w, EltCrack, C, sigma0, n, tau_o, k, Me
     dy = Mesh.hy
 
     # width on edges; evaluated by averaging the widths of adjacent cells
-    wLftEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 0]]) / 2 * InCrack[Mesh.NeiElements[EltCrack, 0]]
-    wRgtEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 1]]) / 2 * InCrack[Mesh.NeiElements[EltCrack, 1]]
-    wBtmEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 2]]) / 2 * InCrack[Mesh.NeiElements[EltCrack, 2]]
-    wTopEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 3]]) / 2 * InCrack[Mesh.NeiElements[EltCrack, 3]]
+    wLftEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 0]]) / 2
+    wRgtEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 1]]) / 2
+    wBtmEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 2]]) / 2
+    wTopEdge = (w[EltCrack] + w[Mesh.NeiElements[EltCrack, 3]]) / 2
     
 
     # pressure gradient data structure. The rows store pressure gradient in the following order.
@@ -208,11 +208,11 @@ def finiteDiff_operator_Herschel_Bulkley(w, EltCrack, C, sigma0, n, tau_o, k, Me
     # 6 - bottom edge in x-direction  # 7 - top edge in x-direction
 
     dp = np.zeros((8, Mesh.NumberOfElts), dtype=np.float64)
-    (dpdxLft, dpdxRgt, dpdyBtm, dpdyTop) = pressure_gradient(w, C, sigma0, Mesh, EltCrack, InCrack)
-    dp[0, EltCrack] = dpdxLft
-    dp[1, EltCrack] = dpdxRgt
-    dp[2, EltCrack] = dpdyBtm
-    dp[3, EltCrack] = dpdyTop
+    dp = np.zeros((8, Mesh.NumberOfElts), dtype=np.float64)
+    dp[0, EltCrack] = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 0]]) / dx
+    dp[1, EltCrack] = (pf[Mesh.NeiElements[EltCrack, 1]] - pf[EltCrack]) / dx
+    dp[2, EltCrack] = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 2]]) / dy
+    dp[3, EltCrack] = (pf[Mesh.NeiElements[EltCrack, 3]] - pf[EltCrack]) / dy
     # linear interpolation for pressure gradient on the edges where central difference not available
     dp[4, EltCrack] = (dp[2, Mesh.NeiElements[EltCrack, 0]] + dp[3, Mesh.NeiElements[EltCrack, 0]] + dp[2, EltCrack] +
                        dp[3, EltCrack]) / 4
@@ -229,34 +229,29 @@ def finiteDiff_operator_Herschel_Bulkley(w, EltCrack, C, sigma0, n, tau_o, k, Me
     dpBtm = (dp[2, EltCrack] ** 2 + dp[6, EltCrack] ** 2) ** 0.5
     dpTop = (dp[3, EltCrack] ** 2 + dp[7, EltCrack] ** 2) ** 0.5
 
-    dpLft[dpLft == 0] = 1e-10
-    dpRgt[dpRgt == 0] = 1e-10
-    dpTop[dpTop == 0] = 1e-10
-    dpBtm[dpBtm == 0] = 1e-10
+    # dpLft[dpLft == 0] = 1e-10
+    # dpRgt[dpRgt == 0] = 1e-10
+    # dpTop[dpTop == 0] = 1e-10
+    # dpBtm[dpBtm == 0] = 1e-10
 
     cond = np.zeros((4, EltCrack.size), dtype=np.float64)
-    var1 = n / (4. * n + 2.) * (1. / 2. / k) ** (1. / n)
-    var2 = 1/n - 1.
-    var3 = 2. + 1/n
-    var4 = 1. + 1/n
-    var5 = n / (n + 1.)                
     
-    x = 1 - 2 * tau_o / wLftEdge / dpLft
-    tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 0]])
-    cond[0, tip_edge] = var1 * dpLft[tip_edge] ** var2 * wLftEdge[tip_edge] ** var3 * x[tip_edge]**var4 * \
-                  (1 + 2*tau_o / wLftEdge[tip_edge] / dpLft[tip_edge] * var5)
-    x = 1 - 2*tau_o / wRgtEdge / dpRgt
-    tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 1]])
-    cond[1, tip_edge] = var1 * dpRgt[tip_edge] ** var2 * wRgtEdge[tip_edge] ** var3 * x[tip_edge]**var4 * \
-                  (1 + 2*tau_o / wRgtEdge[tip_edge] / dpRgt[tip_edge] * var5)
-    x = 1 - 2*tau_o / wBtmEdge / dpBtm
-    tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 2]])
-    cond[2, tip_edge] = var1 * dpBtm[tip_edge] ** var2 * wBtmEdge[tip_edge] ** var3 * x[tip_edge]**var4 * \
-                  (1 + 2*tau_o / wBtmEdge[tip_edge] / dpBtm[tip_edge] * var5)
-    x = 1 - 2*tau_o / wTopEdge / dpTop
-    tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 3]])
-    cond[3, tip_edge] = var1 * dpTop[tip_edge] ** var2 * wTopEdge[tip_edge] ** var3 * x[tip_edge]**var4 * \
-                  (1 + 2*tau_o / wTopEdge[tip_edge] / dpTop[tip_edge] * var5)
+    x = 1 - 2 * fluidProp.T0 / wLftEdge / dpLft
+    # tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 0]])
+    cond[0, in_tip[0]] = fluidProp.var1 * dpLft[in_tip[0]] ** fluidProp.var2 * wLftEdge[in_tip[0]] ** fluidProp.var3 * x[in_tip[0]]**fluidProp.var4 * \
+                  (1 + 2*fluidProp.T0 / wLftEdge[in_tip[0]] / dpLft[in_tip[0]] * fluidProp.var5)
+    x = 1 - 2*fluidProp.T0 / wRgtEdge / dpRgt
+    # tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 1]])
+    cond[1, in_tip[1]] = fluidProp.var1 * dpRgt[in_tip[1]] ** fluidProp.var2 * wRgtEdge[in_tip[1]] ** fluidProp.var3 * x[in_tip[1]]**fluidProp.var4 * \
+                  (1 + 2*fluidProp.T0 / wRgtEdge[in_tip[1]] / dpRgt[in_tip[1]] * fluidProp.var5)
+    x = 1 - 2*fluidProp.T0 / wBtmEdge / dpBtm
+    # tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 2]])
+    cond[2, in_tip[2]] = fluidProp.var1 * dpBtm[in_tip[2]] ** fluidProp.var2 * wBtmEdge[in_tip[2]] ** fluidProp.var3 * x[in_tip[2]]**fluidProp.var4 * \
+                  (1 + 2*fluidProp.T0 / wBtmEdge[in_tip[2]] / dpBtm[in_tip[2]] * fluidProp.var5)
+    x = 1 - 2*fluidProp.T0 / wTopEdge / dpTop
+    # tip_edge = np.where(InCrack[Mesh.NeiElements[EltCrack, 3]])
+    cond[3, in_tip[3]] = fluidProp.var1 * dpTop[in_tip[3]] ** fluidProp.var2 * wTopEdge[in_tip[3]] ** fluidProp.var3 * x[in_tip[3]]**fluidProp.var4 * \
+                  (1 + 2*fluidProp.T0 / wTopEdge[in_tip[3]] / dpTop[in_tip[3]] * fluidProp.var5)
 
     indx_elts = np.arange(len(EltCrack))
     FinDiffOprtr[indx_elts, indx_elts] = -(cond[0, :] + cond[1, :]) / dx ** 2 - (cond[2, :] + cond[3, :]) / dy ** 2
@@ -1240,10 +1235,15 @@ def MakeEquationSystem_ViscousFluid_pressure_substituted_deltaP(solk, interItr, 
     """
 
     (to_solve, to_impose, wLastTS, pfLastTS, imposed_val, EltCrack, Mesh, dt, Q, C, muPrime, rho, InCrack, LeakOff,
-     sigma0, turb, dgrain, gravity, active, wc_to_impose, wc, cf, neiInCrack, fluid_prop) = args
+     sigma0, turb, dgrain, gravity, active, wc_to_impose, wc, cf, neiInCrack, fluid_prop, in_tip) = args
 
+    n_ch = len(to_solve)
+    n_act = len(active)
+    n_tip = len(imposed_val)
+    n_total = n_ch + n_act + n_tip
+    
     wcNplusOne = np.copy(wLastTS)
-    wcNplusOne[to_solve] += solk[:len(to_solve)]
+    wcNplusOne[to_solve] += solk[:n_ch]
     wcNplusOne[to_impose] = imposed_val
     if len(wc_to_impose) > 0:
         wcNplusOne[active] = wc_to_impose
@@ -1255,6 +1255,12 @@ def MakeEquationSystem_ViscousFluid_pressure_substituted_deltaP(solk, interItr, 
     vkm1 = interItr[0]
 
     wcNplusHalf = (wLastTS + wcNplusOne) / 2
+    
+    pf = np.zeros((Mesh.NumberOfElts, ), dtype=np.float64)
+    pf[to_solve] = np.dot(C[np.ix_(to_solve, EltCrack)], wcNplusOne[EltCrack]) + sigma0[to_solve]
+    pf[active] = pfLastTS[active] + solk[n_ch : n_ch + n_act]
+    pf[to_impose] = pfLastTS[to_impose] + solk[n_ch + n_act:]
+
 
     vk = vkm1
     if fluid_prop.rheology == 'Newtonian':    
@@ -1272,26 +1278,22 @@ def MakeEquationSystem_ViscousFluid_pressure_substituted_deltaP(solk, interItr, 
                                                     neiInCrack)
     elif fluid_prop.rheology in ["Herschel-Bulkley", "HBF"]:
         FinDiffOprtr, eff_mu = finiteDiff_operator_Herschel_Bulkley(wcNplusOne,
+                                                   pf,
                                                    EltCrack,
-                                                   C,
-                                                   sigma0,
-                                                   fluid_prop.n,
-                                                   fluid_prop.T0,
-                                                   fluid_prop.k,
+                                                   fluid_prop,
                                                    Mesh,
                                                    InCrack,
-                                                   neiInCrack)
+                                                   neiInCrack,
+                                                   in_tip)
     elif fluid_prop.rheology in ['power law', 'PLF']:
-        FinDiffOprtr, eff_mu = finiteDiff_operator_power_law(wcNplusOne,         
+        FinDiffOprtr, eff_mu = finiteDiff_operator_power_law(wcNplusOne,
+                                                   pf,          
                                                    EltCrack,
-                                                   C,
-                                                   sigma0,
-                                                   fluid_prop.n,
-                                                   None,
-                                                   fluid_prop.k,
+                                                   fluid_prop,
                                                    Mesh,
                                                    InCrack,
-                                                   neiInCrack)
+                                                   neiInCrack,
+                                                   in_tip)
 
     if gravity:
         G = Gravity_term(wcNplusOne,
@@ -1304,11 +1306,7 @@ def MakeEquationSystem_ViscousFluid_pressure_substituted_deltaP(solk, interItr, 
     else:
         G = np.zeros((Mesh.NumberOfElts,))
 
-    n_ch = len(to_solve)
-    n_act = len(active)
-    n_tip = len(imposed_val)
-    n_total = n_ch + n_act + n_tip
-
+    
     ch_indxs = np.arange(n_ch)
     act_indxs = n_ch + np.arange(n_act)
     tip_indxs = n_ch + n_act + np.arange(n_tip)
@@ -1384,8 +1382,8 @@ def MakeEquationSystem_ViscousFluid_pressure_substituted_deltaP(solk, interItr, 
 
     return A, S, interItr_kp1, indices
 
-# -----------------------------------------------------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------------------------------------------------
 
 def MakeEquationSystem_mechLoading(wTip, EltChannel, EltTip, C, EltLoaded, w_loaded):
     """
@@ -1406,8 +1404,8 @@ def MakeEquationSystem_mechLoading(wTip, EltChannel, EltTip, C, EltLoaded, w_loa
 
     return A, S
 
-#-----------------------------------------------------------------------------------------------------------------------
 
+#-----------------------------------------------------------------------------------------------------------------------
 
 def MakeEquationSystem_volumeControl(w_lst_tmstp, wTip, EltChannel, EltTip, sigma_o, C, dt, Q, ElemArea, lkOff):
     """
@@ -1427,8 +1425,8 @@ def MakeEquationSystem_volumeControl(w_lst_tmstp, wTip, EltChannel, EltTip, sigm
 
     return A, S
 
-#-----------------------------------------------------------------------------------------------------------------------
 
+#-----------------------------------------------------------------------------------------------------------------------
 
 def Elastohydrodynamic_ResidualFun(solk, system_func, interItr, *args):
     """
@@ -1595,7 +1593,8 @@ def Jacobian(Residual_function, sys_func, x, TypValue, central=False, interItr=N
         if central:
             xin = np.copy(x)
             xin[i] = xin[i]-Epsilon
-            Jac[:,i] = (Residual_function(xip, sys_func, interItr, *args)[0] - Residual_function(xin, sys_func, interItr, *args)[0])/(2*Epsilon)
+            Jac[:,i] = (Residual_function(xip, sys_func, interItr, *args)[0] - Residual_function(
+                xin, sys_func, interItr, *args)[0])/(2*Epsilon)
             if np.isnan(Jac[:, i]).any():
                 print('jacobian nan')
                 print('stop')
@@ -1700,26 +1699,6 @@ def pressure_gradient(w, C, sigma0, Mesh, EltCrack, InCrack):
 
     return dpdxLft, dpdxRgt, dpdyBtm, dpdyTop
 
-
-#-----------------------------------------------------------------------------------------------------------------------
-
-
-def pressure_gradient_2(w, solk, C, sigma0, Mesh, EltCrack, EltChannel, EltTip, EltClosed, InCrack):
-    """
-    This function gives the pressure gradient at the cell edges evaluated with the pressure calculated from the
-    elasticity relation for the given fracture width.
-    """
-    pf = np.zeros((Mesh.NumberOfElts, ), dtype=np.float64)
-    pf[EltChannel] = np.dot(C[np.ix_(EltChannel, EltCrack)], w[EltCrack]) + sigma0[EltChannel]
-    pf[EltClosed] = pf_last[EltClosed] + solk[len(EltChannel):len(EltChannel) + len(EltClosed)]
-    pf[EltChannel] = pf_last[EltTip] + solk[len(EltChannel) + len(EltClosed):]
-
-    dpdxLft = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 0]]) / Mesh.hx * InCrack[Mesh.NeiElements[EltCrack, 0]]
-    dpdxRgt = (pf[Mesh.NeiElements[EltCrack, 1]] - pf[EltCrack]) / Mesh.hx * InCrack[Mesh.NeiElements[EltCrack, 1]]
-    dpdyBtm = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 2]]) / Mesh.hy * InCrack[Mesh.NeiElements[EltCrack, 2]]
-    dpdyTop = (pf[Mesh.NeiElements[EltCrack, 3]] - pf[EltCrack]) / Mesh.hx * InCrack[Mesh.NeiElements[EltCrack, 3]]
-
-    return dpdxLft, dpdxRgt, dpdyBtm, dpdyTop
 
 #-----------------------------------------------------------------------------------------------------------------------
 
@@ -1897,7 +1876,7 @@ def Anderson(sys_fun, guess, interItr_init, sim_prop, *args, relax=1.0,
 def get_complete_solution(sol, indices, *args):
 
     (to_solve, to_impose, wLastTS, pfLastTS, imposed_val, EltCrack, Mesh, dt, Q, C, muPrime, rho, InCrack, LeakOff,
-     sigma0, turb, dgrain, gravity, active, wc_to_impose, wc, cf, neiInCrack, fluid_prop) = args
+     sigma0, turb, dgrain, gravity, active, wc_to_impose, wc, cf, neiInCrack, fluid_prop, in_tip) = args
 
     tip_act = np.concatenate((to_impose, active))
 
