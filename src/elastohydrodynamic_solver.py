@@ -208,7 +208,6 @@ def finiteDiff_operator_Herschel_Bulkley(w, pf, EltCrack, fluidProp, Mesh, InCra
     # 6 - bottom edge in x-direction  # 7 - top edge in x-direction
 
     dp = np.zeros((8, Mesh.NumberOfElts), dtype=np.float64)
-    dp = np.zeros((8, Mesh.NumberOfElts), dtype=np.float64)
     dp[0, EltCrack] = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 0]]) / dx
     dp[1, EltCrack] = (pf[Mesh.NeiElements[EltCrack, 1]] - pf[EltCrack]) / dx
     dp[2, EltCrack] = (pf[EltCrack] - pf[Mesh.NeiElements[EltCrack, 2]]) / dy
