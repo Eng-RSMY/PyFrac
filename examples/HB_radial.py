@@ -16,7 +16,7 @@ from fracture_initialization import Geometry, InitializationParameters
 from visualization import *
 
 # creating mesh
-Mesh = CartesianMesh(2., 2., 61, 61)
+Mesh = CartesianMesh(2., 2., 41, 41)
 
 # solid properties
 nu = 0.4                            # Poisson's ratio
@@ -36,7 +36,7 @@ Q0 = np.asarray([[0, 600], [3.3e-5, 0]])  # injection rate
 Injection = InjectionProperties(Q0, Mesh)
 
 # fluid properties
-Fluid = FluidProperties(viscosity=10, rheology='HBF', n=1.0, k=10, T0=200)
+Fluid = FluidProperties(viscosity=10, rheology='HBF', n=1.0, k=10, T0=20)
 
 # simulation properties
 simulProp = SimulationProperties()
@@ -48,13 +48,12 @@ simulProp.tmStpPrefactor = 0.45
 simulProp.maxSolverItrs = 250
 # simulProp.plotFigure = False
 simulProp.set_tipAsymptote('HBF')
-# simulProp.elastohydrSolver = 'implicit_Picard'
 simulProp.elastohydrSolver = 'anderson'
 simulProp.tolFractFront = 0.01
 simulProp.solveSparse = False
 simulProp.set_simulation_name('HBF_100-10-200_61')
 simulProp.plotVar = ['w', 'ev']
-# simulProp.saveToDisk = False
+simulProp.saveToDisk = False
 
 
 # initialization parameters
@@ -93,73 +92,44 @@ from visualization import *
 
 Fig_R = None
 Fig_w = None
-for sim in ['HBF_70-10-0']:
-            # 'sheer_thining_75-1-7_lk__2020-03-04__10_27_14',
-            # 'sheer_thining_75-1-7_lk__2020-03-05__09_58_48']:
-# loading simulation results
-    Fr_list, properties = load_fractures(address="./Data/HB", sim_name=sim)        # load all fractures
-    time_srs = get_fracture_variable(Fr_list, variable='time')                      # list of times
-    
-    
-    # animate_simulation_results(Fr_list, variable='ev')
-    # plot fracture radius
-    plot_prop = PlotProperties(line_style='.', graph_scaling='loglog')
-    Fig_R = plot_fracture_list(Fr_list,
-                               variable='d_mean',
-                               plot_prop=plot_prop,
-                               fig=Fig_R)
-    # plot analytical radius
-    Fig_R = plot_analytical_solution(regime='M',
-                                     variable='d_mean',
-                                     mat_prop=Solid,
-                                     inj_prop=Injection,
-                                     fluid_prop=Fluid,
-                                     time_srs=time_srs,
-                                     fig=Fig_R)
-    
-    # # plot analytical radius
-    # plot_prop_k = PlotProperties(line_color='b')
-    # Fig_R = plot_analytical_solution(regime='K',
-    #                                  variable='d_mean',
-    #                                  mat_prop=Solid,
-    #                                  inj_prop=Injection,
-    #                                  fluid_prop=Fluid,
-    #                                  time_srs=time_srs,
-    #                                  fig=Fig_R,
-    #                                  plot_prop=plot_prop)
-    
-    # # plot width at center
-    # Fig_w = plot_fracture_list_at_point(Fr_list,
-    #                                     variable='w',
-    #                                     plot_prop=plot_prop,
-    #                                     fig=Fig_w)
-    # # plot analytical width at center
-    # Fig_w = plot_analytical_solution_at_point('M',
-    #                                           'w',
-    #                                           Solid,
-    #                                           Injection,
-    #                                           fluid_prop=Fluid,
-    #                                           time_srs=time_srs,
-    #                                           fig=Fig_w)
 
-# # loading simulation results
-# Fr_list, properties = load_fractures(address="./Data/HB", sim_name='sheer_thining_75-1-7', step_size=10)        # load all fractures
-# time_srs = get_fracture_variable(Fr_list, variable='time')                      # list of times
-#
-# # plot fracture radius
-# plot_prop = PlotProperties()
-# plot_prop.lineStyle = 'x'               # setting the line style to point
-# plot_prop.graphScaling = 'loglog'       # setting to log log plot
-# Fig_R = plot_fracture_list(Fr_list,
-#                            variable='d_mean',
-#                            fig=Fig_R,
-#                            plot_prop=plot_prop)
-#
+# loading simulation results
+Fr_list, properties = load_fractures(address="./Data/HB", sim_name=sim)        # load all fractures
+time_srs = get_fracture_variable(Fr_list, variable='time')                      # list of times
+
+
+# animate_simulation_results(Fr_list, variable='w')
+# plot fracture radius
+plot_prop = PlotProperties(line_style='.', graph_scaling='loglog')
+Fig_R = plot_fracture_list(Fr_list,
+                           variable='d_mean',
+                           plot_prop=plot_prop,
+                           fig=Fig_R)
+# plot analytical radius
+Fig_R = plot_analytical_solution(regime='M',
+                                 variable='d_mean',
+                                 mat_prop=Solid,
+                                 inj_prop=Injection,
+                                 fluid_prop=Fluid,
+                                 time_srs=time_srs,
+                                 fig=Fig_R)
+
+# # plot analytical radius
+# plot_prop_k = PlotProperties(line_color='b')
+# Fig_R = plot_analytical_solution(regime='K',
+#                                  variable='d_mean',
+#                                  mat_prop=Solid,
+#                                  inj_prop=Injection,
+#                                  fluid_prop=Fluid,
+#                                  time_srs=time_srs,
+#                                  fig=Fig_R,
+#                                  plot_prop=plot_prop)
+
 # # plot width at center
 # Fig_w = plot_fracture_list_at_point(Fr_list,
 #                                     variable='w',
-#                                     fig=Fig_w,
-#                                     plot_prop=plot_prop)
+#                                     plot_prop=plot_prop,
+#                                     fig=Fig_w)
 # # plot analytical width at center
 # Fig_w = plot_analytical_solution_at_point('M',
 #                                           'w',
@@ -168,6 +138,8 @@ for sim in ['HBF_70-10-0']:
 #                                           fluid_prop=Fluid,
 #                                           time_srs=time_srs,
 #                                           fig=Fig_w)
+
+
 # time_srs = np.asarray([2, 200, 5000, 30000, 100000])
 # Fr_list, properties = load_fractures(address="./Data/M_radial_explicit",
 #                                      time_srs=time_srs)

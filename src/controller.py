@@ -605,8 +605,7 @@ class Controller:
                         self.Figures[index] = Fr_advanced.plot_fracture(variable=plt_var,
                                                                        projection='2D_clrmap',
                                                                        mat_properties=self.solid_prop,
-                                                                       fig=self.Figures[index],
-                                                                       edge=0)
+                                                                       fig=self.Figures[index])
                         # plotting source elements
                         plot_injection_source(self.fracture,
                                               fig=self.Figures[index])

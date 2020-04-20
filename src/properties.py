@@ -335,7 +335,7 @@ class InjectionProperties:
                                          mesh.
     """
 
-    def __init__(self, rate, mesh, source_coordinates=None, source_loc_func=None):
+    def __init__(self, rate, mesh, source_coordinates=None, source_loc_func=None, sink_loc_func=None, sink_vel_func=None):
         """
         The constructor of the InjectionProperties class.
         """
@@ -377,13 +377,30 @@ class InjectionProperties:
             self.sourceLocFunc = source_loc_func
             self.sourceElem = []
             for i in range(mesh.NumberOfElts):
-             if self.sourceLocFunc(mesh.CenterCoor[i, 0], mesh.CenterCoor[i, 1]):
+                if self.sourceLocFunc(mesh.CenterCoor[i, 0], mesh.CenterCoor[i, 1]):
                  self.sourceElem.append(i)
 
         if len(self.sourceElem) == 0:
             raise ValueError("No source element found!")
         self.sourceCoordinates = [np.mean(mesh.CenterCoor[self.sourceElem, 0]),
                                   np.mean(mesh.CenterCoor[self.sourceElem, 1])]
+        
+        self.sinkLocFunc = sink_loc_func
+        self.sinkVelFunc = sink_vel_func
+        if sink_loc_func is not None:
+            if sink_vel_func is None:
+                raise ValueError("Sink velocity function is required for sink elements!")
+            
+            self.sinkElem = []
+            for i in range(mesh.NumberOfElts):
+                if self.sinkLocFunc(mesh.CenterCoor[i, 0], mesh.CenterCoor[i, 1]):
+                 self.sinkElem.append(i)
+            
+            self.sinkVel = np.empty(len(self.sinkElem))
+            for i in range(len(self.sinkElem)):
+                self.sinkVel[i] = sink_vel_func(mesh.CenterCoor[self.sinkElem[i], 0],
+                                                mesh.CenterCoor[self.sinkElem[i], 1])
+                
 
     #-------------------------------------------------------------------------------------------------------------------
 
@@ -419,12 +436,36 @@ class InjectionProperties:
         """
 
         # update source elements according to the new mesh.
-        actv_cells = set()
-        for i in self.sourceElem:
-            actv_cells.add(new_mesh.locate_element(old_mesh.CenterCoor[i, 0],
-                                                      old_mesh.CenterCoor[i, 1]))
+        if self.sourceLocFunc is None:
+            actv_cells = set()
+            for i in self.sourceElem:
+                actv_cells.add(new_mesh.locate_element(old_mesh.CenterCoor[i, 0],
+                                                        old_mesh.CenterCoor[i, 1]))
+            self.sourceElem = list(actv_cells)
+        else:
+            self.sourceElem = []
+            for i in range(new_mesh.NumberOfElts):
+                if self.sourceLocFunc(new_mesh.CenterCoor[i, 0], new_mesh.CenterCoor[i, 1]):
+                 self.sourceElem.append(i)
 
-        self.sourceElem = list(actv_cells)
+        
+        if self.sinkLocFunc is not None:
+            # actv_cells = set()
+            # for i in self.sinkElem:
+            #     actv_cells.add(new_mesh.locate_element(old_mesh.CenterCoor[i, 0],
+            #                                            old_mesh.CenterCoor[i, 1]))
+            # self.sinkElem = list(actv_cells)
+            
+            self.sinkElem = []
+            for i in range(new_mesh.NumberOfElts):
+                if self.sinkLocFunc(new_mesh.CenterCoor[i, 0], new_mesh.CenterCoor[i, 1]):
+                 self.sinkElem.append(i)
+            
+            self.sinkVel = np.empty(len(self.sinkElem))
+            for i in range(len(self.sinkElem)):
+                    self.sinkVel[i] = self.sinkVelFunc(new_mesh.CenterCoor[self.sinkElem[i], 0],
+                                                       new_mesh.CenterCoor[self.sinkElem[i], 1])
+        
 
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -659,6 +700,7 @@ class SimulationProperties:
         self.solveStagnantTip = simul_param.solve_stagnant_tip
         self.solveTipCorrRib = simul_param.solve_tip_corr_rib
         self.solveSparse = simul_param.solve_sparse
+        self.elastohydrSolver = simul_param.elastohydr_solver
 
         # miscellaneous
         self.verbosity = simul_param.verbosity

@@ -43,7 +43,9 @@ def attempt_time_step(Frac, C, mat_properties, fluid_properties, sim_properties,
     """
 
     Qin = inj_properties.get_injection_rate(Frac.time, Frac)
-
+    if inj_properties.sinkLocFunc is not None:
+        Qin[inj_properties.sinkElem] -= inj_properties.sinkVel * Frac.mesh.EltArea
+    
     if sim_properties.frontAdvancing == 'explicit':
 
         perfNode_explFront = instrument_start('extended front', perfNode)
@@ -271,7 +273,7 @@ def injection_same_footprint(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
     Fr_kplus1.injectedVol += sum(Qin) * timeStep
     Fr_kplus1.efficiency = (Fr_kplus1.injectedVol - sum(Fr_kplus1.LkOffTotal[Fr_kplus1.EltCrack])) \
                            / Fr_kplus1.injectedVol
-    Fr_kplus1.source = np.where(Qin != 0)[0]
+    Fr_kplus1.source = Fr_lstTmStp.EltCrack[np.where(Qin[Fr_lstTmStp.EltCrack] != 0)[0]]
     fluidVel = return_data[0]
     if fluid_properties.turbulence:
         if sim_properties.saveReynNumb or sim_properties.saveFluidFlux:
@@ -788,7 +790,8 @@ def injection_extended_footprint(w_k, Fr_lstTmStp, C, timeStep, Qin, mat_propert
     Fr_kplus1.efficiency = (Fr_kplus1.injectedVol - Fr_kplus1.LkOffTotal) / Fr_kplus1.injectedVol
     if sim_properties.saveRegime:
         Fr_kplus1.regime = regime
-    Fr_kplus1.source = np.where(Qin != 0)[0]
+    # Fr_kplus1.source = np.where(Qin != 0)[0]
+    Fr_kplus1.source = Fr_lstTmStp.EltCrack[np.where(Qin[Fr_lstTmStp.EltCrack] != 0)[0]]
     Fr_kplus1.effVisc = data[0][2]
     
     if fluid_properties.turbulence:
@@ -1770,7 +1773,8 @@ def time_step_explicit_front(Fr_lstTmStp, C, timeStep, Qin, mat_properties, flui
     Fr_kplus1.LkOffTotal += np.sum(LkOff)
     Fr_kplus1.injectedVol += sum(Qin) * timeStep
     Fr_kplus1.efficiency = (Fr_kplus1.injectedVol - Fr_kplus1.LkOffTotal) / Fr_kplus1.injectedVol
-    Fr_kplus1.source = np.where(Qin != 0)[0]
+    # Fr_kplus1.source = np.where(Qin != 0)[0]
+    Fr_kplus1.source = Fr_lstTmStp.EltCrack[np.where(Qin[Fr_lstTmStp.EltCrack] != 0)[0]]
 
     if sim_properties.saveRegime:
         regime = np.full((Fr_lstTmStp.mesh.NumberOfElts, ), np.nan, dtype=np.float32)
