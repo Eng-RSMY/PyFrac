@@ -16,31 +16,44 @@ from fracture_initialization import Geometry, InitializationParameters
 from visualization import *
 
 # creating mesh
-Mesh = CartesianMesh(2., 2., 41, 41)
+Mesh = CartesianMesh(.25, .25, 61, 61)
 
 # solid properties
-nu = 0.4                            # Poisson's ratio
-youngs_mod = 3.3e10                 # Young's modulus
+nu = 0.15                            # Poisson's ratio
+youngs_mod = 3e10                 # Young's modulus
 Eprime = youngs_mod / (1 - nu ** 2) # plain strain modulus
-K_Ic = 1e6                          # fracture toughness
+K_Ic = 2e6
+sigma0 = 15e6                          # fracture toughness
 
 # material properties
 Solid = MaterialProperties(Mesh,
                            Eprime,
                            K_Ic, 
                            # Carters_coef = 1e-6
+                           confining_stress=sigma0,
+                           # minimum_width=1e5
                            )
 
 # injection parameters
-Q0 = np.asarray([[0, 600], [3.3e-5, 0]])  # injection rate
-Injection = InjectionProperties(Q0, Mesh)
+
+def sink_location(x, y):
+    return x >= 1. and  x <= 1.5
+
+def sink_vel(x, y):
+    return 2e-4
+
+Q0 = 0.001/60
+Injection = InjectionProperties(Q0,
+                                Mesh,
+                                # sink_loc_func=sink_location, sink_vel_func=sink_vel
+                                )
 
 # fluid properties
-Fluid = FluidProperties(viscosity=10, rheology='HBF', n=1.0, k=10, T0=20)
+Fluid = FluidProperties(viscosity=0.01, rheology='HBF', n=1.0, k=0.01, T0=5)
 
 # simulation properties
 simulProp = SimulationProperties()
-simulProp.finalTime = 1e5                           # the time at which the simulation stops
+simulProp.finalTime = 4*60                           # the time at which the simulation stops
 # simulProp.frontAdvancing = 'implicit'               # to set explicit front tracking
 # simulProp.saveTSJump, simulProp.plotTSJump = 5, 5   # save and plot after every five time steps
 simulProp.set_outputFolder("./Data/HB") # the disk address where the files are saved
@@ -51,18 +64,18 @@ simulProp.set_tipAsymptote('HBF')
 simulProp.elastohydrSolver = 'anderson'
 simulProp.tolFractFront = 0.01
 simulProp.solveSparse = False
-simulProp.set_simulation_name('HBF_100-10-200_61')
-simulProp.plotVar = ['w', 'ev']
-simulProp.saveToDisk = False
+simulProp.set_simulation_name('Bingham_1e0_1e-1_5_61')
+simulProp.plotVar = ['ev']
+# simulProp.saveToDisk = False
 
 
 # initialization parameters
-# Fr_geometry = Geometry('radial', radius=0.02)
+# Fr_geometry = Geometry('radial', radius=0.2)
 # from elasticity import load_isotropic_elasticity_matrix
 # C = load_isotropic_elasticity_matrix(Mesh, Eprime)
-# init_param = InitializationParameters(Fr_geometry, regime='static', net_pressure='2e7', elasticity_matrix=C)
+# init_param = InitializationParameters(Fr_geometry, regime='static', net_pressure='3e6', elasticity_matrix=C)
 
-Fr_geometry = Geometry('radial', radius=1.)
+Fr_geometry = Geometry('radial', radius=.2)
 init_param = InitializationParameters(Fr_geometry, regime='M')
 
 # creating fracture object
@@ -82,7 +95,7 @@ controller = Controller(Fr,
                         simulProp)
 
 # run the simulation
-controller.run()
+# controller.run()
 
 ####################
 # plotting results #
@@ -94,11 +107,11 @@ Fig_R = None
 Fig_w = None
 
 # loading simulation results
-Fr_list, properties = load_fractures(address="./Data/HB", sim_name=sim)        # load all fractures
+Fr_list, properties = load_fractures(address="./Data/HB", sim_name="Bingham_1e0_1e-1_5_61")        # load all fractures
 time_srs = get_fracture_variable(Fr_list, variable='time')                      # list of times
 
 
-# animate_simulation_results(Fr_list, variable='w')
+animate_simulation_results(Fr_list, variable='w')
 # plot fracture radius
 plot_prop = PlotProperties(line_style='.', graph_scaling='loglog')
 Fig_R = plot_fracture_list(Fr_list,
@@ -196,5 +209,5 @@ Fig_R = plot_analytical_solution(regime='M',
 #                             projection='3D',
 #                             fig=Fig_Fr)
 
-# plt.show(block=True)
+plt.show(block=True)
 

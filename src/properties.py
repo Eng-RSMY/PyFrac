@@ -317,7 +317,16 @@ class InjectionProperties:
                                          a source element. It should have to arguments (x, y) and return True or False.
                                          It is also called upon re-meshing to get the source elements on the coarse
                                          mesh.
-
+       sink_loc_func (function):      -- the sink location function is used to get the elements where there is a fixed rate
+                                         sink. It should take the x and y coordinates and return True or False
+                                         depending upon if the sink is present on these coordinates. This function is
+                                         evaluated at each of the cell centre coordinates to determine if the cell is
+                                         a sink element. It should have to arguments (x, y) and return True or False.
+                                         It is also called upon re-meshing to get the source elements on the coarse
+                                         mesh.
+                                             
+      sink_vel_func (function):       -- this function gives the sink velocity at the given (x, y) point.
+                                   
     Attributes:
         injectionRate (ndarray):      -- array specifying the time series (row 0) and the corresponding injection
                                          rates (row 1). The time series provide the time when the injection rate
@@ -333,6 +342,9 @@ class InjectionProperties:
                                          a source element. It should have to arguments (x, y) and return True or False.
                                          It is also called upon re-meshing to get the source elements on the coarse
                                          mesh.
+        sinkLocFunc (function):      --  see description of arguments.
+        sink_vel_func (function):    --  see description of arguments.
+                                         
     """
 
     def __init__(self, rate, mesh, source_coordinates=None, source_loc_func=None, sink_loc_func=None, sink_vel_func=None):
